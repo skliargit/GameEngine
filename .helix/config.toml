@@ -1,0 +1,4 @@
+[keys.normal.b]
+b = ":sh ./build-all.sh"
+c = ":sh ./clean.sh"
+r = ":sh ./clean.sh && ./build-all.sh"
