@@ -1,22 +1,22 @@
 #!/bin/sh
 
-COMMON_FLAGS="-fPIE"
+COMMON_FLAGS="-fPIC"
 OBJECT_FLAGS="-fvisibility=hidden -g -Wall -Wextra -Werror -Wvla -Wreturn-type"
-LINKER_FLAGS="-Wl,-rpath,. -L../bin/ -lengine"
-DEFINE_FLAGS="-DDEBUG_FLAG"
-INCLUDE_FLAGS="-Isrc/ -I../engine/src/"
+LINKER_FLAGS="-shared"
+DEFINE_FLAGS="-DDEBUG_FLAG -DLIB_EXPORT_FLAG"
+INCLUDE_FLAGS="-Isrc/"
 
 SRC_DIR="src/"
 OBJ_DIR="../bin/objs/"
-OUTPUT_FILE="../bin/testapp"
+OUTPUT_FILE="../bin/libengine.so"
 
 src_files=$(find "$SRC_DIR" -type f -name "*.c")
 
 obj_files=""
 need_rebuild=false
-app_exists=false
+target_exists=false
 
-[ -f "$OUTPUT_FILE" ] && app_exists=true
+[ -f "$OUTPUT_FILE" ] && target_exists=true
 
 for src_file in $src_files; do
 
@@ -39,7 +39,7 @@ for src_file in $src_files; do
     obj_files="$obj_files $obj_path"
 done
 
-if [ "$need_rebuild" = true ] || [ "$app_exists" = false ]; then
+if [ "$need_rebuild" = true ] || [ "$target_exists" = false ]; then
 
     if ! clang $COMMON_FLAGS $LINKER_FLAGS $obj_files -o "$OUTPUT_FILE"; then
         echo "Build error."
@@ -47,10 +47,10 @@ if [ "$need_rebuild" = true ] || [ "$app_exists" = false ]; then
     fi
 
     # Вывод результата
-    if [ "$app_exists" = false ]; then
-        echo "The application is assembled."
+    if [ "$target_exists" = false ]; then
+        echo "The library is assembled."
     else
-        echo "The application has been updated."
+        echo "The library has been updated."
     fi
 else
     echo "No changes found, no assembly required."

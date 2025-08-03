@@ -3,13 +3,13 @@ setlocal EnableDelayedExpansion
 
 set COMMON_FLAGS=-fdeclspec
 set OBJECT_FLAGS=-g -Wall -Wextra -Werror -Wvla -Wreturn-type
-set LINKER_FLAGS=-L..\bin\ -lengine
-set DEFINE_FLAGS=-DDEBUG_FLAG
-set INCLUDE_FLAGS=-Isrc\ -I..\engine\src\
+set LINKER_FLAGS=-shared -luser32
+set DEFINE_FLAGS=-DDEBUG_FLAG -DLIB_EXPORT_FLAG
+set INCLUDE_FLAGS=-Isrc\
 
 set SRC_DIR=src\
 set OBJ_DIR=..\bin\objs\
-set OUTPUT_FILE=..\bin\testapp.exe
+set OUTPUT_FILE=..\bin\engine.dll
 
 set src_files=
 pushd %~dp0
@@ -76,9 +76,9 @@ if !build_app!=="true" (
     )
     
     if !app_exists!=="false" (
-        echo The application is assembled.
+        echo The library is assembled.
     ) else (
-        echo The application has been updated.
+        echo The library has been updated.
     )
 ) else (
     echo No changes found, no assembly required.

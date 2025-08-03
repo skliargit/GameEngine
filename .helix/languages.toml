@@ -1,0 +1,8 @@
+[[language]]
+name = "c"
+file-types = ["c", "h"]
+indent = { tab-width = 4, unit = "    " }
+
+[language-server.clangd]
+command = "clangd"
+args = ["--compile-commands-dir=.helix/","--header-insertion=never"]

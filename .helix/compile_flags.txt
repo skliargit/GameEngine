@@ -1,0 +1,5 @@
+-Wall
+-I../engine/src/
+-I../testapp/src/
+-DDEBUG_FLAG
+-DLIB_EXPORT_FLAG
