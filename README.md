@@ -2,16 +2,16 @@
 
 ## Содержание
 1. [Скачивание проекта](#download)
-2. [Сборка на Archlinux](#archlinux)
+2. [Сборка на Arch Linux](#archlinux)
 3. [Сборка на Windows](#windows)
 
-## <a name="archlinux"></a>Скачивание прокта
+## <a name="archlinux"></a>Скачивание проекта
 Выберите директорию, в которую необходимо сохранить проект, и перейдите в неё. Затем выполните:
 ```sh
 git clone https://github.com/skliargit/GameEngine.git GameEngine
 ```
 
-## <a name="archlinux"></a>Сборка проекта на Archlinux
+## <a name="archlinux"></a>Сборка проекта на Arch Linux
 Установка зависимостей:
 
 > Обязательные пакеты: clang vulkan-headers vulkan-icd-loader vulkan-tools vulkan-validation-layers glslang
@@ -45,7 +45,7 @@ cd bin
 3. Vulkan SDK:
     + Скачать: [VulkanSDK-windows-X64-1.4.321.1](https://sdk.lunarg.com/sdk/download/1.4.321.1/windows/vulkansdk-windows-X64-1.4.321.1.exe "Ссылка на скачивание"), можно и другую версию по [ссылке](https://vulkan.lunarg.com/sdk/home#windows "Ссылка на сайт Vulkan Lunar")
 
-> Версии можно вибирать другие, но тогда пути к файлам придется подправить!
+> Версии можно выбирать другие, но тогда пути к файлам придется подправить!
 
 Для настройка переменных среды выполните в командной строке:
 ```cmd
