@@ -1,6 +1,7 @@
 #include <platform/console.h>
 #include <platform/systimer.h>
 #include <platform/time.h>
+#include <platform/window.h>
 #include <core/logger.h>
 #include <debug/assert.h>
 
@@ -264,10 +265,34 @@ int main()
     end = platform_systimer_now();
     printf("Time call %lf us\n", (end - start) * 1000000.0);
 
+    // ------------------------- Test Window -------------------------
+
     platform_console_write(CONSOLE_COLOR_DEFAULT, "\n");
 
-    // Специально вызвал ошибку, что бы протестировать.
-    ASSERT(1!=1, "1 must be qeual to 1");
+    platform_window* window_inst = nullptr;
+    platform_window_config window_conf;
+    window_conf.backend_type = PLATFORM_WINDOW_BACKEND_TYPE_AUTO;
+    window_conf.title = "Simple window";
+    window_conf.width = 800;
+    window_conf.height = 600;
+
+    start = platform_systimer_now();
+    platform_window_create(&window_conf, &window_inst);
+    end = platform_systimer_now();
+    LOG_INFO("Window successfully created (time call: %lf us).", (end - start) * 1000000.0);
+
+    while(platform_window_poll_events(window_inst)); //{ LOG_DEBUG("MESSAGE"); };
+
+    start = platform_systimer_now();
+    platform_window_destroy(window_inst);
+    end = platform_systimer_now();
+    LOG_INFO("Window successfully destroyed (time call: %lf us).", (end - start) * 1000000.0);
+
+    // --------------------------------------------------------------
+
+    platform_console_write(CONSOLE_COLOR_DEFAULT, "\n");
+    // NOTE: Специально вызвал ошибку, что бы протестировать.
+    // ASSERT(1!=1, "1 must be qeual to 1");
 
     return 0;
 }

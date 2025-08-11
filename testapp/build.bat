@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 
 set COMMON_FLAGS=-fdeclspec
 set OBJECT_FLAGS=-g -Wall -Wextra -Werror -Wvla -Wreturn-type
-set LINKER_FLAGS=-L..\bin\ -lengine
+set LINKER_FLAGS=-L..\bin\ -lengine -Wl,/entry:mainCRTStartup,/subsystem:windows
 set DEFINE_FLAGS=-DDEBUG_FLAG
 set INCLUDE_FLAGS=-Isrc\ -I..\engine\src\
 

@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 
 set COMMON_FLAGS=-fdeclspec
 set OBJECT_FLAGS=-g -Wall -Wextra -Werror -Wvla -Wreturn-type
-set LINKER_FLAGS=-shared -luser32
+set LINKER_FLAGS=-shared -luser32 -lgdi32
 set DEFINE_FLAGS=-DDEBUG_FLAG -DLIB_EXPORT_FLAG
 set INCLUDE_FLAGS=-Isrc\
 

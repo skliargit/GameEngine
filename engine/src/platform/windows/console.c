@@ -29,6 +29,7 @@
         if(!stdout_handle)
         {
             stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
+            if(!stdout_handle) return;
         }
 
         if(!message) return;
@@ -53,6 +54,7 @@
         if(!stderr_handle)
         {
             stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
+            if(!stderr_handle) return;
         }
 
         if(!message) return;

@@ -66,6 +66,26 @@
     #define NOINLINE __attribute__((noinline))
 #endif
 
+// TODO: Использовать в будущем.
+// Определение макросов подсказок ветвления LIKELY/UNLIKELY.
+// #if COMPILER_CLANG_FLAG
+//     // @brief Указывает, что условие, скорее всего, истинно.
+//     #define LIKELY(expr)   __builtin_expect(!!(expr), 1)
+//     // @brief Указывает, что условие, скорее всего, ложно.
+//     #define UNLIKELY(expr) __builtin_expect(!!(expr), 0)
+// #elif COMPILER_MSC_FLAG
+//     #include <intrin.h>
+//     // @brief Указывает, что условие, скорее всего, истинно.
+//     #define LIKELY(expr)   (__assume(!!(expr)), (expr))
+//     // @brief Указывает, что условие, скорее всего, ложно.
+//     #define UNLIKELY(expr) (__assume(!(expr)), (expr))
+// #else
+//     // @brief Указывает, что условие, скорее всего, истинно.
+//     #define LIKELY(expr)   (expr)
+//     // @brief Указывает, что условие, скорее всего, ложно.
+//     #define UNLIKELY(expr) (expr)
+// #endif
+
 //----------------------------------------------------- Определения типов -----------------------------------------------------
 
 // @brief 8-битное беззнаковое целое.
@@ -280,7 +300,7 @@ typedef struct range {
     @param member Поле структуры смещение которого нужно получить.
     @return Смещение поля структуры в байтах.
 */
-#define MEMBER_GET_OFFSET(type, member) ((usize)(&((type*)null)->member))
+#define MEMBER_GET_OFFSET(type, member) ((u64)(&((type*)nullptr)->member))
 
 /*
     @brief Копирует 8 байт из памяти источника в память назначения.

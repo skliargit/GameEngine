@@ -1,4 +1,8 @@
 -Wall
+-Wextra
+-Werror
+-Wvla
+-Wreturn-type
 -I../engine/src/
 -I../testapp/src/
 -DDEBUG_FLAG
