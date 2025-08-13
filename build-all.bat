@@ -4,6 +4,8 @@ SETLOCAL EnableDelayedExpansion
 :: Инициализация флагов.
 set tool_missing="false"
 
+goto :start
+
 :: Функции.
 :check_tool
 	where "%~1" >nul 2>&1
@@ -38,6 +40,8 @@ goto :eof
 	)
 goto :eof
 
+:start
+
 :: Основной код
 echo ^>^>^> Checking tools...
 call :check_tool clang
@@ -49,7 +53,7 @@ echo ^>^>^> Building engine library...
 call :proj_build "engine/build.bat" || exit /b 1
 
 echo ^>^>^> Building testapp...
-call :proj_build "testapp/build.sh" || exit /b 1
+call :proj_build "testapp/build.bat" || exit /b 1
 
 echo ^>^>^> Build completed successfully!
 ENDLOCAL

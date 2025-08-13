@@ -98,7 +98,8 @@
         };
 
         FILETIME ft;
-        if (!SystemTimeToFileTime(&st, &ft)) {
+        if(!SystemTimeToFileTime(&st, &ft))
+        {
             return 0;
         }
 

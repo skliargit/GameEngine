@@ -2,6 +2,8 @@
 
 #if PLATFORM_WINDOWS_FLAG
 
+    #include "debug/assert.h"
+
     #include <stdio.h>
     #include <stdarg.h>
     #include <string.h>
@@ -79,7 +81,8 @@
     {
         ASSERT(dst != nullptr, "Destination buffer cannot be null.");
         ASSERT(src != nullptr, "Source string cannot be null.");
-        return strcpy(dst, src);
+        strcpy_s(dst, strlen(src) + 1, src);
+        return dst;
     }
 
     char* platform_string_ncopy(char* dst, const char* src, u64 length)
