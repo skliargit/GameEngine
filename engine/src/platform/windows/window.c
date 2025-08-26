@@ -1,114 +1,113 @@
 #include "platform/window.h"
 
-#if PLATFORM_WINDOWS_FLAG
+#ifdef PLATFORM_WINDOWS_FLAG
 
     #include "core/logger.h"
-
+    #include "core/memory.h"
+    #include "core/string.h"
+    #include "debug/assert.h"
     #include <Windows.h>
-    #include <stdlib.h>
 
-    struct platform_window {
-        // Window-specific.
+    typedef struct platform_window {
         HWND hwnd;
-        HINSTANCE hinstance;
         const char* title;
-    };
+        u32 width;
+        u32 height;
+        bool should_close;
+    } platform_window;
 
-    // Объявление обработчика событий.
+    typedef struct platform_window_context {
+        HINSTANCE hinstance;
+        const char* window_class;
+        u64 memory_requirement;
+        platform_window* window;
+    } platform_window_context;
+
+    static platform_window_context* context = nullptr;
     static LRESULT CALLBACK window_process(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
-    bool platform_window_create(const platform_window_config* config, platform_window** out_window)
+    bool platform_window_initialize(platform_window_backend_type type)
     {
-        if(!config || !out_window)
+        ASSERT(context == nullptr, "Platform window is already initialized.");
+        ASSERT(type < PLATFORM_WINDOW_BACKEND_TYPE_COUNT, "Must be less than PLATFORM_WINDOW_BACKEND_TYPE_COUNT.");
+
+        if(type != PLATFORM_WINDOW_BACKEND_TYPE_AUTO && type != PLATFORM_WINDOW_BACKEND_TYPE_WIN32)
         {
-            LOG_ERROR("%s requires valid config and out_window pointers.", __func__);
+            LOG_FATAL("Unsupported window backend type selected for Windows: %d.", type);
             return false;
         }
+        type = PLATFORM_WINDOW_BACKEND_TYPE_WIN32;
 
-        // Проверка на повторную инициализацию.
-        if(*out_window != nullptr)
-        {
-            LOG_ERROR("%s: Output window pointer must be null (already contains window reference)", __func__);
-            return false;
-        }
+        u64 memory_requirement = sizeof(platform_window_context);
+        context = mallocate(memory_requirement, MEMORY_TAG_APPLICATION);
+        mzero(context, memory_requirement);
 
-        u64 memory_requirement = sizeof(platform_window);
-        // TODO: Обернуть!
-        platform_window* window = malloc(memory_requirement);
-        if(!window)
-        {
-            LOG_FATAL("%s: Failed to obtain memory for window instance.", __func__);
-            return false;
-        }
-        memset(window, 0, memory_requirement);
+        context->memory_requirement = memory_requirement;
+        context->window_class = "EngineGameWindow";
+        context->hinstance = GetModuleHandle(nullptr);
 
-        static const char* window_class = "PlatformWindowClass";
-        window->hinstance = GetModuleHandle(nullptr);
-
-        WNDCLASS wc = {};
-        wc.lpfnWndProc   = window_process;
-        wc.hInstance     = window->hinstance;
-        wc.lpszClassName = window_class;
-        wc.hCursor       = LoadCursor(nullptr, IDC_ARROW);
+        // Регистрация класса окна.
+        WNDCLASSEX wc = {};
+        wc.cbSize = sizeof(WNDCLASSEX);
+        wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+        wc.lpfnWndProc = window_process;
+        wc.hInstance = context->hinstance;
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
         wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+        wc.lpszClassName = context->window_class;
+        wc.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+        wc.hIconSm = LoadIcon(nullptr, IDI_APPLICATION);
 
-        if(!RegisterClass(&wc))
+        if(!RegisterClassEx(&wc))
         {
-            LOG_ERROR("%s: Failed to registration window class '%s' (error %lu).", __func__, window_class, GetLastError());
-            free(window);
+            LOG_ERROR("Failed to register window class '%s' (error %lu).", context->window_class, GetLastError());
+            platform_window_shutdown();
             return false;
         }
 
-        window->hwnd = CreateWindowEx(
-            0, window_class, config->title, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, config->width, config->height,
-            nullptr, nullptr, window->hinstance, window
-        );
-        if(!window->hwnd)
-        {
-            LOG_ERROR("%s: Failed to create window (error %lu).", __func__, GetLastError());
-            free(window);
-            return false;
-        }
-
-        // Показываем окно
-        ShowWindow(window->hwnd, SW_SHOW);
-        UpdateWindow(window->hwnd);
-
-        *out_window = window;
-        return false;
+        LOG_TRACE("Platform window initialized successfully with backend type: %d.", type);
+        return true;
     }
 
-    void platform_window_destroy(platform_window* window)
+    void platform_window_shutdown()
     {
-        if(!window)
+        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+
+        // Уничтожение всех окон (пока только одно окно).
+        if(context->window)
         {
-            LOG_ERROR("%s requires a valid pointer to window.", __func__);
-            return;
+            LOG_WARN("Window was not properly destroyed before shutdown.");
+            platform_window_destroy(context->window);
+            // NOTE: Осовобождение context->window в platform_window_destroy().
         }
 
-        if(window->hwnd)
+        // Убираем регистрацию класса окна
+        if(context->window_class)
         {
-            SetWindowLongPtr(window->hwnd, GWLP_USERDATA, (LONG_PTR)nullptr);
-            DestroyWindow(window->hwnd);
+            UnregisterClass(context->window_class, context->hinstance);
         }
 
-        // TODO: Обернуть!
-        free(window);
+        mfree(context, context->memory_requirement, MEMORY_TAG_APPLICATION);
+        context = nullptr;
+
+        LOG_TRACE("Platform window shutdown completed.");
     }
 
-    bool platform_window_poll_events(platform_window* window)
+    bool platform_window_is_initialized()
     {
-        if(!window)
-        {
-            LOG_ERROR("%s requires a valid pointer to window.", __func__);
-            return false;
-        }
+        return context != nullptr;
+    }
+
+    bool platform_window_poll_events()
+    {
+        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
 
         MSG msg = {};
         while(PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
         {
             if(msg.message == WM_QUIT)
             {
+                LOG_TRACE("Window close requested, stopping event loop.");
                 return false;
             }
 
@@ -119,6 +118,75 @@
         return true;
     }
 
+    platform_window* platform_window_create(const platform_window_config* config)
+    {
+        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(config != nullptr, "Config pointer must be non-null.");
+
+        LOG_TRACE("Creating window '%s' (size: %dx%d)...", config->title, config->width, config->height);
+
+        if(context->window)
+        {
+            LOG_WARN("Window has already been created (only one window supported for now).");
+            return nullptr;
+        }
+
+        context->window = mallocate(sizeof(platform_window), MEMORY_TAG_APPLICATION);
+        mzero(context->window, sizeof(platform_window));
+
+        context->window->title = string_duplicate(config->title);
+        context->window->width = config->width;
+        context->window->height = config->height;
+        context->window->should_close = false;
+
+        context->window->hwnd = CreateWindowEx(
+            WS_EX_APPWINDOW, context->window_class, config->title, WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
+            CW_USEDEFAULT, config->width, config->height, nullptr, nullptr, context->hinstance, nullptr
+        );
+
+        if(!context->window->hwnd)
+        {
+            LOG_ERROR("Failed to create window (error %lu).", GetLastError());
+            platform_window_destroy(context->window);
+            return nullptr;
+        }
+
+        // Сохранение указателя на структуру окна в userdata.
+        // TODO: Использовать.
+        SetWindowLongPtr(context->window->hwnd, GWLP_USERDATA, (LONG_PTR)context->window);
+
+        // Отображение окна.
+        ShowWindow(context->window->hwnd, SW_SHOW);
+        UpdateWindow(context->window->hwnd);
+
+        LOG_TRACE("Window '%s' created successfully.", context->window->title);
+
+        return context->window;
+    }
+
+    void platform_window_destroy(platform_window* window)
+    {
+        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
+
+        LOG_TRACE("Destroying window '%s'...", window->title);
+
+        if(window->hwnd)
+        {
+            SetWindowLongPtr(window->hwnd, GWLP_USERDATA, (LONG_PTR)nullptr);
+            DestroyWindow(window->hwnd);
+        }
+
+        if(window->title)
+        {
+            string_free(window->title);
+        }
+
+        mfree(window, sizeof(platform_window), MEMORY_TAG_APPLICATION);
+        context->window = nullptr;
+        LOG_TRACE("Window destroy complete.");
+    }
+
     LRESULT CALLBACK window_process(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
     {
         switch(msg)
@@ -127,7 +195,7 @@
             case WM_SYSKEYDOWN:
             case WM_KEYUP:
             case WM_SYSKEYUP:
-                LOG_TRACE("%s: Key event.", __func__);
+                LOG_TRACE("Key event.");
                 return 0;
 
             case WM_LBUTTONDOWN:
@@ -138,24 +206,25 @@
             case WM_MBUTTONUP:
             case WM_XBUTTONDOWN:
             case WM_XBUTTONUP:
-                LOG_TRACE("%s: Button event.", __func__);
+                LOG_TRACE("Button event.");
                 return 0;
 
             case WM_MOUSEMOVE:
-                LOG_TRACE("%s: Motion event.", __func__);
+                // LOG_TRACE("Motion event.");
                 return 0;
 
             case WM_SIZE:
-                LOG_TRACE("%s: Resize event.", __func__);
+                LOG_TRACE("Resize event for window '%s' to %ux%u.", context->window->title, context->window->width, context->window->height);
                 return 0;
 
             case WM_DESTROY:
-                LOG_TRACE("%s: Close event.", __func__);
+                LOG_TRACE("Close event for window '%s'.", context->window->title);
                 PostQuitMessage(0);
                 return 0;
 
             default:
-                LOG_TRACE("%s: Unsupported event: %u", __func__, msg);
+                // LOG_TRACE("Unhandled event type: %u.", msg);
+                break;
         }
 
         return DefWindowProc(hwnd, msg, wparam, lparam);

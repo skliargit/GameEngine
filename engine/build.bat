@@ -3,7 +3,7 @@ setlocal EnableDelayedExpansion
 
 set COMMON_FLAGS=-fdeclspec
 set OBJECT_FLAGS=-g -Wall -Wextra -Werror -Wvla -Wreturn-type
-set LINKER_FLAGS=-shared -luser32 -lgdi32
+set LINKER_FLAGS=-shared -luser32 -lgdi32 -lwinmm
 set DEFINE_FLAGS=-DDEBUG_FLAG -DLIB_EXPORT_FLAG
 set INCLUDE_FLAGS=-Isrc\
 
@@ -35,7 +35,7 @@ for %%s in (%src_files%) do (
 
     if not exist !obj_dir! mkdir !obj_dir!
     if errorlevel 1 exit /b 1
-    
+
     set should_compile="false"
     if not exist !obj_path! (
         set should_compile="true"
@@ -44,7 +44,7 @@ for %%s in (%src_files%) do (
         for %%b in ("!obj_path!") do set obj_time=%%~tb
         if !src_time! gtr !obj_time! set should_compile="true"
     )
-    
+
     if !should_compile!=="true" (
         clang %COMMON_FLAGS% %OBJECT_FLAGS% %DEFINE_FLAGS% %INCLUDE_FLAGS% -c !src_file! -o !obj_path!
         if errorlevel 1 (
@@ -56,7 +56,7 @@ for %%s in (%src_files%) do (
         powershell -command "(Get-Item '!obj_path!').LastWriteTimeUtc = (Get-Item '!src_file!').LastWriteTimeUtc"
         set need_rebuild="true"
     )
-    
+
     set obj_files=!obj_files! !obj_path!
 )
 
@@ -74,7 +74,7 @@ if !build_app!=="true" (
         echo Build error
         exit /b 1
     )
-    
+
     if !app_exists!=="false" (
         echo The library is assembled.
     ) else (

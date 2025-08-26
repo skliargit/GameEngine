@@ -6,8 +6,7 @@
 #if defined __x86_64__ || defined __LP64__ || defined _WIN64 || defined _M_X64
     #define PLATFORM_64BIT_FLAG 1
 #else
-    #define PLATFORM_64BIT_FLAG 0
-    #error "Unsupported system bit depth."
+    #error "Unsupported system bit depth. 32-bit platforms are not supported."
 #endif
 
 // Определение операционной системы платформы (обычно на уровне makefile).
@@ -27,64 +26,103 @@
 //-------------------------------------------------- Определения компилятора --------------------------------------------------
 
 // Определение используемого компилятора.
-#if __clang__ && !_MSC_VER
+#if defined _MSC_VER
+    #define COMPILER_MSC_FLAG   1
+#elif defined __clang__
     #define COMPILER_CLANG_FLAG 1
-#elif _MSC_VER
-    #define COMPILER_MSC_FLAG 1
 #else
     #error "Unknown or unsupported compiler."
 #endif
 
 // Определение квалификатора экспорта кода.
-#if defined(__cplusplus)
+#ifdef __cplusplus
     #define EXTERN_C extern "C"
 #else
     #define EXTERN_C
 #endif
 
 // Определение квалификатора экспорта/импорта функций.
-#if LIB_EXPORT_FLAG
-    #if COMPILER_MSC_FLAG
+#ifdef LIB_EXPORT_FLAG
+    #if defined COMPILER_MSC_FLAG
         #define API EXTERN_C __declspec(dllexport)
-    #elif COMPILER_CLANG_FLAG
+    #elif defined COMPILER_CLANG_FLAG
         #define API EXTERN_C __attribute__((visibility("default")))
     #endif
 #else
-    #if COMPILER_MSC_FLAG
+    #if defined COMPILER_MSC_FLAG
         #define API EXTERN_C __declspec(dllimport)
-    #elif COMPILER_CLANG_FLAG
+    #elif defined COMPILER_CLANG_FLAG
         #define API EXTERN_C
     #endif
 #endif
 
 // Определение квалификаторов INLINE/NOINLINE.
-#if COMPILER_MSC_FLAG
-    #define INLINE   __forceinline
+#if defined COMPILER_MSC_FLAG
+    #define INLINE   static __forceinline
     #define NOINLINE __declspec(noinline)
-#elif COMPILER_CLANG_FLAG
-    #define INLINE   __attribute__((always_inline)) inline
+#elif defined COMPILER_CLANG_FLAG
+    #define INLINE   static __attribute__((always_inline)) inline
     #define NOINLINE __attribute__((noinline))
 #endif
 
-// TODO: Использовать в будущем.
-// Определение макросов подсказок ветвления LIKELY/UNLIKELY.
-// #if COMPILER_CLANG_FLAG
-//     // @brief Указывает, что условие, скорее всего, истинно.
-//     #define LIKELY(expr)   __builtin_expect(!!(expr), 1)
-//     // @brief Указывает, что условие, скорее всего, ложно.
-//     #define UNLIKELY(expr) __builtin_expect(!!(expr), 0)
-// #elif COMPILER_MSC_FLAG
-//     #include <intrin.h>
-//     // @brief Указывает, что условие, скорее всего, истинно.
-//     #define LIKELY(expr)   (__assume(!!(expr)), (expr))
-//     // @brief Указывает, что условие, скорее всего, ложно.
-//     #define UNLIKELY(expr) (__assume(!(expr)), (expr))
-// #else
-//     // @brief Указывает, что условие, скорее всего, истинно.
-//     #define LIKELY(expr)   (expr)
-//     // @brief Указывает, что условие, скорее всего, ложно.
-//     #define UNLIKELY(expr) (expr)
-// #endif
+// Макрос для выполнения статической провеки на этапе компиляции.
+#ifdef __cplusplus
+    /*
+        @brief Выполняет проверку утверждения во время компиляции, и выводит сообщение если оно ложно.
+        @param assertion Проверяемое во время компиляции утверждение.
+        @param message Сообщение которое будет выведено если утверждение ложно.
+    */
+    #define STATIC_ASSERT(assertion, message) static_assert(assertion, message)
+#else
+    /*
+        @brief Выполняет проверку утверждения во время компиляции, и выводит сообщение если оно ложно.
+        @param assertion Проверяемое во время компиляции утверждение.
+        @param message Сообщение которое будет выведено если утверждение ложно.
+    */
+    #define STATIC_ASSERT(assertion, message) _Static_assert(assertion, message)
+#endif
+
+// Макрос для программной остановки в отладчике (debug breakpoint).
+#ifndef DEBUG_BREAK
+    // Современные компиляторы с поддержкой __has_builtin.
+    #if defined(__has_builtin)
+        #if __has_builtin(__builtin_debugtrap)
+            #define DEBUG_BREAK() __builtin_debugtrap()
+        #elif __has_builtin(__debugbreak)
+            #define DEBUG_BREAK() __debugbreak()
+        #endif
+    #endif
+    // Запасные варианты для компиляторов без __has_builtin.
+    #if !defined(DEBUG_BREAK)
+        #if defined COMPILER_CLANG_FLAG
+            #define DEBUG_BREAK() __builtin_trap()
+        #elif defined COMPILER_MSC_FLAG
+            #include <intrin.h>
+            #define DEBUG_BREAK() __debugbreak()
+        #else
+            #define DEBUG_BREAK() asm volatile("int $0x03")
+        #endif
+    #endif
+#endif
+
+// Макрос подсказок ветвления LIKELY/UNLIKELY для компилятора.
+#if defined COMPILER_CLANG_FLAG
+    // @brief Указывает, что условие, скорее всего, истинно.
+    #define LIKELY(expr)   __builtin_expect(!!(expr), 1)
+    // @brief Указывает, что условие, скорее всего, ложно.
+    #define UNLIKELY(expr) __builtin_expect(!!(expr), 0)
+#elif defined COMPILER_MSC_FLAG
+    #include <intrin.h>
+    // @brief Указывает, что условие, скорее всего, истинно.
+    #define LIKELY(expr)   (__assume(!!(expr)), (expr))
+    // @brief Указывает, что условие, скорее всего, ложно.
+    #define UNLIKELY(expr) (__assume(!(expr)), (expr))
+#else
+    // @brief Указывает, что условие, скорее всего, истинно.
+    #define LIKELY(expr)   (expr)
+    // @brief Указывает, что условие, скорее всего, ложно.
+    #define UNLIKELY(expr) (expr)
+#endif
 
 //----------------------------------------------------- Определения типов -----------------------------------------------------
 
@@ -118,24 +156,23 @@ typedef float f32;
 // @brief 64-битное число с плавающей точкой.
 typedef double f64;
 
-// NOTE: Не планируется использоваться в проекте.
 // Типы размер которых зависит от платформы.
-// #if defined PLATFORM_64BIT_FLAG && defined PLATFORM_LINUX_FLAG
-//     // @brief Беззнаковое целое, используется для размера памяти и смещения (соответствует разрядности текущей платформы).
-//     typedef unsigned long usize;
-//     // @brief Знаковое целое, используется для смещения (соответствует разрядности текущей платформы).
-//     typedef signed long isize;
-// #elif defined PLATFORM_64BIT_FLAG && defined PLATFORM_WINDOWS_FLAG
-//     // @brief Беззнаковое целое, используется для размера памяти и смещения (соответствует разрядности текущей платформы).
-//     typedef unsigned long long usize;
-//     // @brief Знаковое целое, используется для смещения (соответствует разрядности текущей платформы).
-//     typedef signed long long isize;
-// #else
-//     // @brief Беззнаковое целое, используется для размера памяти и смещения (соответствует разрядности текущей платформы).
-//     typedef unsigned int usize;
-//     // @brief Знаковое целое, используется для смещения (соответствует разрядности текущей платформы).
-//     typedef signed int isize;
-// #endif
+#if defined PLATFORM_64BIT_FLAG && defined PLATFORM_LINUX_FLAG
+    // @brief Беззнаковое целое, используется для размера памяти и смещения (соответствует разрядности текущей платформы).
+    typedef unsigned long usize;
+    // @brief Знаковое целое, используется для смещения (соответствует разрядности текущей платформы).
+    typedef signed long isize;
+#elif defined PLATFORM_64BIT_FLAG && defined PLATFORM_WINDOWS_FLAG
+    // @brief Беззнаковое целое, используется для размера памяти и смещения (соответствует разрядности текущей платформы).
+    typedef unsigned long long usize;
+    // @brief Знаковое целое, используется для смещения (соответствует разрядности текущей платформы).
+    typedef signed long long isize;
+#else
+    // @brief Беззнаковое целое, используется для размера памяти и смещения (соответствует разрядности текущей платформы).
+    typedef unsigned int usize;
+    // @brief Знаковое целое, используется для смещения (соответствует разрядности текущей платформы).
+    typedef signed int isize;
+#endif
 
 // Определение логического типа.
 #ifndef __cplusplus
@@ -190,17 +227,16 @@ typedef struct range {
 #define I32_MIN (-I32_MAX - 1)
 #define I64_MIN (-I64_MAX - 1)
 
-// NOTE: Не планируется использоваться в проекте.
 // Максимальные и минимальные значения зависимых от платформы типов.
-// #ifdef PLATFORM_64BIT_FLAG 
-//     #define USIZE_MAX U64_MAX
-//     #define ISIZE_MAX I64_MAX
-//     #define ISIZE_MIN I64_MIN
-// #else
-//     #define USIZE_MAX U32_MAX
-//     #define ISIZE_MAX I32_MAX
-//     #define ISIZE_MIN I32_MIN
-// #endif
+#if PLATFORM_64BIT_FLAG 
+    #define USIZE_MAX U64_MAX
+    #define ISIZE_MAX I64_MAX
+    #define ISIZE_MIN I64_MIN
+#else
+    #define USIZE_MAX U32_MAX
+    #define ISIZE_MAX I32_MAX
+    #define ISIZE_MIN I32_MIN
+#endif
 
 // Недействительные значения данных.
 #define INVALID_ID8  U8_MAX
@@ -258,7 +294,7 @@ typedef struct range {
     @param v1 Второе значение.
     @return Минимальное значение.
 */
-#define MIN(v0,v1) (v0 < v1 ? v0 : v1)
+#define MIN(v0, v1) (((v0) < (v1)) ? (v0) : (v1))
 
 /*
     @brief Макрос получения максимального значения из двух заданных.
@@ -266,7 +302,7 @@ typedef struct range {
     @param v1 Второе значение.
     @return Максимальное значение.
 */
-#define MAX(v0,v1) (v0 > v1 ? v0 : v1)
+#define MAX(v0, v1) (((v0) > (v1)) ? (v0) : (v1))
 
 /*
     @brief Макрос усечения значения в указанных пределах.
@@ -275,7 +311,7 @@ typedef struct range {
     @param max Значение максимального предела включительно.
     @return Значение в заданных пределах.
 */
-#define CLAMP(value, min, max) ((value <= min) ? min : (value >= max) ? max : value)
+#define CLAMP(value, min, max) (((value) <= (min)) ? (min) : (((value) >= (max)) ? (max) : (value)))
 
 /*
     @brief Макрос вычисляет новый указатель относительно заданного указателя и смещения.
@@ -295,52 +331,10 @@ typedef struct range {
 #define MEMBER_GET_VALUE(type, pointer, member) (((type*)(pointer))->member)
 
 /*
-    @brief Макрос получает смещение поля структуры заданного типом и полем.
-    @param type Тип структуры.
-    @param member Поле структуры смещение которого нужно получить.
-    @return Смещение поля структуры в байтах.
+    @brief Подавляет предупреждения о неиспользуемых переменных путем явного
+           приведения к void (без overhead).
 */
-#define MEMBER_GET_OFFSET(type, member) ((u64)(&((type*)nullptr)->member))
-
-/*
-    @brief Копирует 8 байт из памяти источника в память назначения.
-    @param dst Указатель на память откуда нужно скопировать байты.
-    @param src Указатель на память куда нужно скопировать байты.
-*/
-INLINE void copy8(void* dst, void* src)
-{
-    *((u64*)dst) = *((u64*)src);
-}
-
-/*
-    @brief Копирует 4 байта из памяти источника в память назначения.
-    @param dst Указатель на память откуда нужно скопировать байты.
-    @param src Указатель на память куда нужно скопировать байты.
-*/
-INLINE void copy4(void* dst, void* src)
-{
-    *((u32*)dst) = *((u32*)src);
-}
-
-/*
-    @brief Копирует 2 байта из памяти источника в память назначения.
-    @param dst Указатель на память откуда нужно скопировать байты.
-    @param src Указатель на память куда нужно скопировать байты.
-*/
-INLINE void copy2(void* dst, void* src)
-{
-    *((u16*)dst) = *((u16*)src);
-}
-
-/*
-    @brief Копирует 1 байта из памяти источника в память назначения.
-    @param dst Указатель на память откуда нужно скопировать байты.
-    @param src Указатель на память куда нужно скопировать байты.
-*/
-INLINE void copy1(void* dst, void* src)
-{
-    *((u8*)dst) = *((u8*)src);
-}
+#define UNUSED(x) ((void)x)
 
 /*
     @brief Получает ближайшее кратное число заданному с округлением в большую сторону.
@@ -354,7 +348,7 @@ INLINE u64 get_aligned(u64 value, u64 granularity)
 }
 
 /*
-    @brief Получает вближайшие кратные смещения и размера с округлением в большую сторону.
+    @brief Получает ближайшие кратные смещения и размера с округлением в большую сторону.
     @param offset Смещение для которого необходимо получить ближайшее кратное.
     @param size Размер для которого необходимо получить ближайшее кратное.
     @param granularity Необходимая кратность чисел (должно быть степенью двойки!).
@@ -365,24 +359,7 @@ INLINE range get_aligned_range(u64 offset, u64 size, u64 granularity)
     return (range){get_aligned(offset, granularity), get_aligned(size, granularity)};
 }
 
-// Определение статической провеки компилятором.
-#ifdef __cplusplus
-    /*
-        @brief Выполняет проверку утверждения во время компиляции, и выводит сообщение если оно ложно.
-        @param assertion Проверяемое во время компиляции утверждение.
-        @param message Сообщение которое будет выведено если утверждение ложно.
-    */
-    #define STATIC_ASSERT(assertion, message) static_assert(assertion, message)
-#else
-    /*
-        @brief Выполняет проверку утверждения во время компиляции, и выводит сообщение если оно ложно.
-        @param assertion Проверяемое во время компиляции утверждение.
-        @param message Сообщение которое будет выведено если утверждение ложно.
-    */
-    #define STATIC_ASSERT(assertion, message) _Static_assert(assertion, message)
-#endif
-
-//---------------------------------------- Выполнение соответствия проверок утвержений ----------------------------------------
+//------------------------------------------- Проверока утвержений базовых типов ----------------------------------------------
 
 // Проверка соответствия независимых от платформы типов.
 STATIC_ASSERT(sizeof(u8)  == 1, "Size of u8 must be 1 byte.");
@@ -396,7 +373,6 @@ STATIC_ASSERT(sizeof(i64) == 8, "Size of i64 must be 8 bytes.");
 STATIC_ASSERT(sizeof(f32) == 4, "Size of f32 must be 4 bytes.");
 STATIC_ASSERT(sizeof(f64) == 8, "Size of f64 must be 8 bytes.");
 
-// NOTE: Не планируется использоваться в проекте.
 // Проверка соответствия зависимых от платформы типов.
-// STATIC_ASSERT(sizeof(usize) == sizeof(void*), "Size of usize must be equal to address size.");
-// STATIC_ASSERT(sizeof(isize) == sizeof(void*), "Size of isize must be equal to address size.");
+STATIC_ASSERT(sizeof(usize) == sizeof(void*), "Size of usize must be equal to address size.");
+STATIC_ASSERT(sizeof(isize) == sizeof(void*), "Size of isize must be equal to address size.");

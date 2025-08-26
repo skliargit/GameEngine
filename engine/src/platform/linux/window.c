@@ -1,143 +1,169 @@
 #include "platform/window.h"
 
-#if PLATFORM_LINUX_FLAG
+#ifdef PLATFORM_LINUX_FLAG
 
     #include "core/logger.h"
-    #include "platform/linux/backend_wayland.h"
-    #include "platform/linux/backend_xcb.h"
+    #include "core/memory.h"
+    #include "debug/assert.h"
+    #include "platform/linux/wayland_backend.h"
+    #include "platform/linux/xcb_backend.h"
 
-    // TODO: Временно, обернуть!
-    #include <stdlib.h>
-    #include <string.h>
-
-    struct platform_window {
+    typedef struct platform_window_context {
         // Функция создания окна.
-        bool (*backend_create)(const platform_window_config* config, void* internal_data);
+        platform_window* (*window_create)(const platform_window_config* config, void* internal_data);
         // Функция уничтожения окна.
-        void (*backend_destroy)(void* internal_data);
-        // Неблокирующая функция обработки сообщений окна.
-        bool (*backend_poll_events)(void* internal_data);
+        void (*window_destroy)(platform_window* window, void* internal_data);
+        // Неблокирующая функция обработки сообщений окнной системы.
+        bool (*poll_events)(void* internal_data);
+        // Функция завершающая работу оконной системы.
+        void (*shutdown)(void* internal_data);
+        // TODO: Временно, убрать после добавления динамического аллокатора.
+        u64 memory_requirement;
         // Внутренние данные бэкенда (гибкий массив, не влияет на размер структуры).
         u8 internal_data[];
-    };
+    } platform_window_context;
 
-    bool platform_window_create(const platform_window_config* config, platform_window** out_window)
+    static platform_window_context* context = nullptr;
+
+    bool platform_window_initialize(platform_window_backend_type type)
     {
-        if(!config || !out_window)
+        ASSERT(context == nullptr, "Platform window is already initialized.");
+        ASSERT(type < PLATFORM_WINDOW_BACKEND_TYPE_COUNT, "Must be less than PLATFORM_WINDOW_BACKEND_TYPE_COUNT.");
+
+        // Кеширование ответов.
+        bool wayland_is_supported = wayland_backend_is_supported();
+        bool xcb_is_supported = xcb_backend_is_supported();
+
+        // Вывод отладочной информации о поддерживаемых бэкендах.
+        if(wayland_is_supported)
         {
-            LOG_ERROR("%s requires valid config and out_window pointers.", __func__);
-            return false;
+            LOG_TRACE("Wayland backend is supported.");
+        }
+        else
+        {
+            LOG_TRACE("Wayland backend is not supported (server not available).");
         }
 
-        // Проверка на повторную инициализацию.
-        if(*out_window != nullptr)
+        if(xcb_is_supported)
         {
-            LOG_ERROR("%s: Output window pointer must be null (already contains window reference)", __func__);
-            return false;
+            LOG_TRACE("XCB backend is supported.");
+        }
+        else
+        {
+            LOG_TRACE("XCB backend is not supported (X server not available).");
         }
 
         // Автоматический выбор бэкенда.
-        platform_window_backend_type backend_type = config->backend_type;
-        if(backend_type == PLATFORM_WINDOW_BACKEND_TYPE_AUTO)
+        if(type == PLATFORM_WINDOW_BACKEND_TYPE_AUTO)
         {
-            if(wayland_backend_is_supported())
+            if(wayland_is_supported)
             {
-                backend_type = PLATFORM_WINDOW_BACKEND_TYPE_WAYLAND;
-                LOG_TRACE("%s: Backend wayland was automatically selected (preferred).", __func__);
+                type = PLATFORM_WINDOW_BACKEND_TYPE_WAYLAND;
+                LOG_TRACE("Wayland backend automatically selected.");
             }
-            else if(xcb_backend_is_supported())
+            else if(xcb_is_supported)
             {
-                backend_type = PLATFORM_WINDOW_BACKEND_TYPE_XCB;
-                LOG_TRACE("%s: Backend xcb(X11) was automatically selected.", __func__);
+                type = PLATFORM_WINDOW_BACKEND_TYPE_XCB;
+                LOG_TRACE("XCB (X11) backend automatically selected.");
             }
             else
             {
-                LOG_ERROR("%s: No supported window backend found.", __func__);
+                LOG_ERROR("No supported window backend found.");
                 return false;
             }
         }
 
         // Ручной выбор бэкенда (или выбор автоматического режима).
         u64 backend_memory_requirement = 0;
-        if(backend_type == PLATFORM_WINDOW_BACKEND_TYPE_WAYLAND && wayland_backend_is_supported())
+        if(type == PLATFORM_WINDOW_BACKEND_TYPE_WAYLAND && wayland_is_supported)
         {
-            backend_memory_requirement = wayland_backend_instance_memory_requirement();
+            backend_memory_requirement = wayland_backend_memory_requirement();
         }
-        else if(backend_type == PLATFORM_WINDOW_BACKEND_TYPE_XCB && xcb_backend_is_supported())
+        else if(type == PLATFORM_WINDOW_BACKEND_TYPE_XCB && xcb_is_supported)
         {
-            backend_memory_requirement = xcb_backend_instance_memory_requirement();
+            backend_memory_requirement = xcb_backend_memory_requirement();
         }
         else
         {
-            LOG_FATAL("%s: Unknown window backend type selected: %d", __func__, backend_type);
+            LOG_FATAL("Unsupported window backend type selected for Linux: %d.", type);
             return false;
         }
 
-        // Контроль переполнения.
-        if(backend_memory_requirement > U64_MAX - sizeof(platform_window)) {
-            LOG_FATAL("%s: Memory requirement too large.", __func__);
-            return false;
-        }
+        u64 memory_requirement = sizeof(platform_window_context) + backend_memory_requirement;
+        context = mallocate(memory_requirement, MEMORY_TAG_APPLICATION);
+        mzero(context, memory_requirement);
 
-        u64 memory_requirement = sizeof(platform_window) + backend_memory_requirement;
-        // TODO: Обернуть!
-        platform_window* window = malloc(memory_requirement);
-        if(!window)
-        {
-            LOG_FATAL("%s: Failed to obtain memory for window instance.", __func__);
-            return false;
-        }
-        memset(window, 0, memory_requirement);
+        // Необходимо для уничтожения.
+        context->memory_requirement = memory_requirement;
 
         // Инициализация бэкенда.
-        if(backend_type == PLATFORM_WINDOW_BACKEND_TYPE_WAYLAND)
+        bool result = false;
+        if(type == PLATFORM_WINDOW_BACKEND_TYPE_WAYLAND)
         {
-            window->backend_create = wayland_backend_create;
-            window->backend_destroy = wayland_backend_destroy;
-            window->backend_poll_events = wayland_backend_poll_events;
+            context->window_create = wayland_backend_window_create;
+            context->window_destroy = wayland_backend_window_destroy;
+            context->poll_events = wayland_backend_poll_events;
+            context->shutdown = wayland_backend_shutdown;
+            result = wayland_backend_initialize(context->internal_data);
         }
-        else if(backend_type == PLATFORM_WINDOW_BACKEND_TYPE_XCB)
+        else if(type == PLATFORM_WINDOW_BACKEND_TYPE_XCB)
         {
-            window->backend_create = xcb_backend_create;
-            window->backend_destroy = xcb_backend_destroy;
-            window->backend_poll_events = xcb_backend_poll_events;
-        }
-
-        // Создание окна.
-        if(!window->backend_create(config, window->internal_data))
-        {
-            LOG_ERROR("%s: Failed to create window.", __func__);
-            // TODO: Обернуть!
-            free(window);
-            return false;
+            context->window_create = xcb_backend_window_create;
+            context->window_destroy = xcb_backend_window_destroy;
+            context->poll_events = xcb_backend_poll_events;
+            context->shutdown = xcb_backend_shutdown;
+            result = xcb_backend_initialize(context->internal_data);
         }
 
-        *out_window = window;
-        return true;
+        if(!result)
+        {
+            LOG_ERROR("Failed to initialize platform window with backend type: %d.", type);
+        }
+        else
+        {
+            LOG_TRACE("Platform window initialized successfully with backend type: %d.", type);
+        }
+
+        return result;
+    }
+
+    void platform_window_shutdown()
+    {
+        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+
+        context->shutdown(context->internal_data);
+        mfree(context, context->memory_requirement, MEMORY_TAG_APPLICATION);
+        context = nullptr;
+
+        LOG_TRACE("Platform window shutdown completed.");
+    }
+
+    bool platform_window_is_initialized()
+    {
+        return context != nullptr;
+    }
+
+    bool platform_window_poll_events()
+    {
+        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+
+        return context->poll_events(context->internal_data);
+    }
+
+    platform_window* platform_window_create(const platform_window_config* config)
+    {
+        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(config != nullptr, "Config pointer must be non-null.");
+
+        return context->window_create(config, context->internal_data);;
     }
 
     void platform_window_destroy(platform_window* window)
     {
-        if(!window)
-        {
-            LOG_ERROR("%s requires a valid pointer to window.", __func__);
-            return;
-        }
+        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
 
-        window->backend_destroy(window->internal_data);
-        // TODO: Обернуть!
-        free(window);
-    }
-
-    bool platform_window_poll_events(platform_window* window)
-    {
-        if(!window)
-        {
-            LOG_ERROR("%s requires a valid pointer to window.", __func__);
-            return false;
-        }
-
-        return window->backend_poll_events(window->internal_data);
+        context->window_destroy(window, context->internal_data);
     }
 
 #endif

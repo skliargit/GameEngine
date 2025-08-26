@@ -1,7 +1,8 @@
 #include "platform/console.h"
 
-#if PLATFORM_LINUX_FLAG
+#ifdef PLATFORM_LINUX_FLAG
 
+    #include "debug/assert.h"
     #include <stdio.h>
 
     static const char* colors[CONSOLE_COLOR_COUNT] = {
@@ -18,21 +19,41 @@
     };
 
     static const char* format_str = "\033[%sm%s\033[0m";
+    static bool initialized = false;
 
-    void platform_console_write(console_color color, const char* message)
+    bool platform_console_initialize()
     {
-        if(!message) return;
+        if(initialized)
+        {
+            return true;
+        }
 
-        // TODO: Сделать потокобезопасной (flockfile(stdout) и funlockfile(stdout)).
-        fprintf(stdout, format_str, colors[color], message);
+        initialized = true;
+        return true;
     }
 
-    void platform_console_write_error(console_color color, const char* message)
+    void platform_console_shutdown()
     {
-        if(!message) return;
+        initialized = false;
+    }
 
-        // TODO: Сделать потокобезопасной (flockfile(stderr) и funlockfile(stderr)).
-        fprintf(stderr, format_str, colors[color], message);
+    bool platform_console_is_initialized()
+    {
+        return initialized;
+    }
+
+    void platform_console_write(console_stream stream, console_color color, const char* message)
+    {
+        if(!initialized)
+        {
+            return;
+        }
+
+        ASSERT(stream < CONSOLE_STREAM_COUNT, "Must be less than CONSOLE_STREAM_COUNT");
+        ASSERT(color < CONSOLE_COLOR_COUNT, "Must be less than CONSOLE_COLOR_COUNT");
+        ASSERT(message != nullptr, "Message pointer must be non-null.");
+
+        fprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), format_str, colors[color], message);
     }
 
 #endif

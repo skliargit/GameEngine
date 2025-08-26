@@ -1,6 +1,6 @@
 #include "platform/time.h"
 
-#if PLATFORM_LINUX_FLAG
+#ifdef PLATFORM_LINUX_FLAG
 
     #include <time.h>
 
@@ -12,24 +12,15 @@
         return (u64)time(nullptr);
     }
 
-    datetime platform_time_to_local(u64 time_sec)
+    platform_datetime platform_time_to_local(u64 time_sec)
     {
-        static u64 time_last = 0;
-        static datetime dt = { 1970, 01, 01, 00, 00, 00 };
-
-        // TODO: Потокобезопасным.
-        // Возвращение кэшированного значения.
-        if(time_last >= time_sec)
-        {
-            return dt;
-        }
-
         time_t t = (time_t)time_sec;
         struct tm local;
         // NOTE: При первом вызове выполняется медленно, т.к. читает из файла TZ,
         //       после чего кеширует его, и последующие вызовы работают быстрее.
         localtime_r(&t, &local);
 
+        platform_datetime dt;
         dt.year   = (u16)(local.tm_year + 1900);
         dt.month  = (u8)(local.tm_mon + 1);
         dt.day    = (u8)(local.tm_mday);
@@ -37,26 +28,16 @@
         dt.minute = (u8)(local.tm_min);
         dt.second = (u8)(local.tm_sec);
 
-        time_last = time_sec;
         return dt;
     }
 
-    datetime platform_time_to_utc(u64 time_sec)
+    platform_datetime platform_time_to_utc(u64 time_sec)
     {
-        static u64 time_last = 0;
-        static datetime dt = { 1970, 01, 01, 00, 00, 00 };
-
-        // TODO: Потокобезопасным.
-        // Возвращение кэшированного значения.
-        if(time_last >= time_sec)
-        {
-            return dt;
-        }
-
         time_t t = (time_t)time_sec;
         struct tm utc;
         gmtime_r(&t, &utc);
 
+        platform_datetime dt;
         dt.year   = (u16)(utc.tm_year + 1900);
         dt.month  = (u8)(utc.tm_mon + 1);
         dt.day    = (u8)(utc.tm_mday);
@@ -64,11 +45,10 @@
         dt.minute = (u8)(utc.tm_min);
         dt.second = (u8)(utc.tm_sec);
 
-        time_last = time_sec;
         return dt;
     }
 
-    u64 platform_time_from_datetime(const datetime* dt)
+    u64 platform_time_from_datetime(const platform_datetime* dt)
     {
         // TODO: Ограничение даты!
         // Быстрая проверка допустимых диапазоновы.

@@ -43,7 +43,7 @@ if [ ! -f "$XDG_SOURCE_FILE" ]; then
         echo ""
         echo "#include <core/defines.h>"
         echo ""
-        echo "#if PLATFORM_LINUX_FLAG"
+        echo "#ifdef PLATFORM_LINUX_FLAG"
         # Добавление отступа к сгенерированному коду.
         sed 's/^/    /' "$TMP_SOURCE_FILE"
         echo "#endif"

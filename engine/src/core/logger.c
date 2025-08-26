@@ -1,97 +1,111 @@
 #include "core/logger.h"
-#include "core/defines.h"
+#include "core/string.h"
+#include "core/memory.h"
+#include "debug/assert.h"
 
 #include "platform/console.h"
-#include "platform/string.h"
 #include "platform/time.h"
 
 #include <stdarg.h>
 
-// TODO: Обернуть.
-#include <stdlib.h>
-
 // Размер стекового буфера.
-#define BUFFER_SIZE 2048
+#define BUFFER_SIZE 1024
+
+typedef struct log_system_context {
+    log_level level;
+    log_handler_pfn handler;
+    const void* user_data;
+} log_system_context;
 
 // Объявление функции-обработчика по умолчанию.
 static void log_default_handler(const log_message message, const void* user_data);
 
-// TODO: Потокобезопасность.
-// Переменные со значениями по умолчанию.
-static log_handler_pfn current_handler = log_default_handler;
-static log_level current_level = LOG_LEVEL_ERROR;
-static const void* current_user_data = nullptr;
+// Контекст системы логгирования с предустановками.
+static log_system_context context = {
+#if DEBUG_FLAG
+    .level = LOG_LEVEL_TRACE,
+    .handler = log_default_handler,
+    .user_data = nullptr
+#else
+    .level = LOG_LEVEL_ERROR,
+    .handler = log_default_handler,
+    .user_data = nullptr
+#endif
+};
 
 void log_set_level(log_level level)
 {
-    if(level >= LOG_LEVEL_COUNT) return;
+    ASSERT(level < LOG_LEVEL_COUNT, "Must be less than LOG_LEVEL_COUNT.");
+
     // TODO: Потокобезопасность.
-    current_level = level;
+    context.level = level;
 }
 
 void log_set_handler(log_handler_pfn handler, const void* user_data)
 {
     // TODO: Потокобезопасность.
-    current_handler = handler;
-    current_user_data = user_data;
+    context.handler = handler;
+    context.user_data = user_data;
 }
 
 void log_reset_default_handler()
 {
     // TODO: Потокобезопасность.
-    current_handler = log_default_handler;
-    current_user_data = nullptr;
+    context.handler = log_default_handler;
+    context.user_data = nullptr;
 }
 
 void log_write(log_level level, const char* filename, u32 fileline, const char* format, ...)
 {
-    if(level >= LOG_LEVEL_COUNT || !filename || !format) return;
+    ASSERT(level < LOG_LEVEL_COUNT, "Must be less than LOG_LEVEL_COUNT.");
+    ASSERT(filename != nullptr, "Source filename must be provided.");
+    ASSERT(format != nullptr, "Log format string must not be null.");
 
     // TODO: Потокобезопасность.
     // Проверка наличия функции обработчика сообщений.
-    if(current_handler && level <= current_level)
+    if(context.handler && level <= context.level)
     {
         // Внутренний буфер (стековый для потоко-безопасности).
         char internal_buffer[BUFFER_SIZE];
         void* buffer = internal_buffer;
 
-        // TODO: Особенности определения для Linux и Windows.
+        // NOTE: Особенность определения va_list для Linux и Windows.
         __builtin_va_list args;
         va_start(args, format);
 
         // Получение размера строки.
-        i32 buffer_length = platform_string_format_length(format, args) + 1;
+        i32 buffer_length = string_format_va(nullptr, 0, format, args) + 1;
         if(buffer_length > BUFFER_SIZE)
         {
             // TODO: Использовать линейный распределитель или пул памяти.
-            buffer = malloc(sizeof(char) * buffer_length);
+            buffer = mallocate(buffer_length, MEMORY_TAG_STRING);
         }
 
         // Форматирование сообщения.
-        platform_string_format_va(buffer, buffer_length, format, args);
+        string_format_va(buffer, buffer_length, format, args);
         va_end(args);
 
         log_message msg;
         msg.filename        = filename;
-        msg.filename_length = platform_string_length(filename);
+        msg.filename_length = string_length(filename);
         msg.fileline        = fileline;
         msg.level           = level;
         msg.message         = buffer;
         msg.message_length  = buffer_length;
         msg.timestamp       = platform_time_now();
 
-        current_handler(msg, current_user_data);
+        context.handler(msg, context.user_data);
 
         if(buffer_length > BUFFER_SIZE)
         {
             // TODO: Использовать линейный распределитель или пул памяти.
-            free(buffer);
+            mfree(buffer, buffer_length, MEMORY_TAG_STRING);
         }
     }
 
     if(level == LOG_LEVEL_FATAL)
     {
-        // TODO: Остановка программы!
+        DEBUG_BREAK();
     }
 }
 
@@ -113,6 +127,10 @@ void log_default_handler(const log_message message, const void* user_data)
     // Формат сообщения по умолчанию.
     static const char* format_message = "%hu-%02hhu-%02hhu %02hhu:%02hhu:%02hhu %s (%s:%u): %s\n";
 
+    // Кешированная дата.
+    static platform_datetime dt;
+    static u64 ts = 0;
+
     // Внутренний буфер (стековый для потоко-безопасности).
     char internal_buffer[BUFFER_SIZE];
     void* buffer = internal_buffer;
@@ -122,29 +140,33 @@ void log_default_handler(const log_message message, const void* user_data)
     if(buffer_length > BUFFER_SIZE)
     {
         // TODO: Использовать линейный распределитель или пул памяти.
-        buffer = malloc(sizeof(char) * buffer_length);
+        buffer = mallocate(buffer_length, MEMORY_TAG_STRING);
     }
 
-    datetime dt = platform_time_to_local(message.timestamp);
+    if(ts < message.timestamp)
+    {
+        ts = message.timestamp;
+        dt = platform_time_to_local(message.timestamp);
+    }
 
     // Копирование сообщения в буфер.
-    platform_string_format(buffer, buffer_length, format_message, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second,
+    string_format(buffer, buffer_length, format_message, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second,
         levels[message.level], message.filename, message.fileline, message.message
     );
 
     if(message.level <= LOG_LEVEL_ERROR)
     {
-        platform_console_write_error(colors[message.level], buffer);
+        platform_console_write_stderr(colors[message.level], buffer);
     }
     else
     {
-        platform_console_write(colors[message.level], buffer);
+        platform_console_write_stdout(colors[message.level], buffer);
     }
 
     if(buffer_length > BUFFER_SIZE)
     {
         // TODO: Использовать линейный распределитель или пул памяти.
-        free(buffer);
+        mfree(buffer, buffer_length, MEMORY_TAG_STRING);
     }
 
     // NOTE: Не используется для функции, но компилятор ругается, а потому заглушка.

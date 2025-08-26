@@ -1,36 +1,15 @@
-/*
-    @file string.h
-    @brief Кросс-платформенный интерфейс для работы со строками.
-    @author Дмитрий Скляр.
-    @version 1.0
-    @date 23-08-2025
-
-    @license Лицензия Apache, версия 2.0 («Лицензия»);
-          Вы не имеете права использовать этот файл без соблюдения условий Лицензии.
-          Копию Лицензии можно получить по адресу http://www.apache.org/licenses/LICENSE-2.0
-          Если иное не предусмотрено действующим законодательством или не согласовано в письменной форме,
-          программное обеспечение, распространяемое по Лицензии, распространяется на условиях «КАК ЕСТЬ»,
-          БЕЗ КАКИХ-ЛИБО ГАРАНТИЙ ИЛИ УСЛОВИЙ, явных или подразумеваемых. См. Лицензию для получения
-          информации о конкретных языках, регулирующих разрешения и ограничения по Лицензии.
-
-    @note Реализации функций являются платформозависимыми и находятся в соответствующих
-          platform/ модулях (windows, linux и т.д.).
-
-    @note Для корректной работы необходимо предварительно инициализировать:
-            - Подсистему консоли platform_console_initialize()
-*/
-
 #pragma once
 
 #include <core/defines.h>
+#include <platform/string.h>
 
 /*
     @brief Получает количество символов в строке (без учета завершающего нуль-символа).
-    @note Thread-safe, поддерживаются строки в кодировках ANSI/ASCII.
+    @note Поддерживаются строки в кодировках ANSI/ASCII. Для UTF-8 используйте специальные функции.
     @param str Указатель на нуль-терминированную строку.
     @return Количество символов в строке.
 */
-API u64 platform_string_length(const char* str);
+#define string_length(str) platform_string_length(str)
 
 /*
     @brief Форматирует строку с использованием указателя на списк аргументов переменной длины.
@@ -44,7 +23,7 @@ API u64 platform_string_length(const char* str);
             или необходимый размер буфера при length == 0.
             Возвращает -1 в случае ошибки форматирования.
 */
-API i32 platform_string_format_va(char* dst, u64 length, const char* format, void* args);
+#define string_format_va(dst, length, format, args) platform_string_format_va(dst, length, format, args)
 
 /*
     @brief Форматирует строку с использованием списка аргументов переменной длины.
@@ -58,63 +37,78 @@ API i32 platform_string_format_va(char* dst, u64 length, const char* format, voi
             или необходимый размер буфера при length == 0.
             Возвращает -1 в случае ошибки форматирования.
 */
-API i32 platform_string_format(char* dst, u64 length, const char* format, ...);
+#define string_format(dst, length, format, args...) platform_string_format(dst, length, format, ##args)
 
 /*
     @brief Сравнивает две нуль-терминированные строки с учетом регистра.
-    @note Thread-safe, сравнение чувствительно к регистру.
+    @note Сравнение чувствительно к регистру.
     @param lstr Указатель на первую строку (должна быть валидной).
     @param rstr Указатель на вторую строку (должна быть валидной).
     @return true если строки идентичны, false если различны или переданы nullptr указатели.
 */
-API bool platform_string_equal(const char* lstr, const char* rstr);
+#define string_equal(lstr, rstr) platform_string_equal(lstr, rstr)
 
 /*
     @brief Сравнивает две нуль-терминированные строки без учета регистра.
-    @note Thread-safe, сравнение не чувствительно к регистру.
+    @note Сравнение не чувствительно к регистру.
     @param lstr Указатель на первую строку (должна быть валидной).
     @param rstr Указатель на вторую строку (должна быть валидной).
     @return true если строки идентичны (игнорируя регистр), false если различны или переданы nullptr указатели.
 */
-API bool platform_string_equali(const char* lstr, const char* rstr);
+#define string_equali(lstr, rstr) platform_string_equali(lstr, rstr)
 
 /*
     @brief Сравнивает первые N символов двух строк с учетом регистра.
-    @note Thread-safe, если строка короче указанной длины, сравнение завершится на первом нуль-терминаторе.
+    @note Если строка короче указанной длины, сравнение завершится на первом нуль-терминаторе.
     @param lstr Указатель на первую строку (должна быть валидной).
     @param rstr Указатель на вторую строку (должна быть валидной).
     @param length Количество символов для сравнения, если length = 0, строки считаются равными.
     @return true если указанные части строк идентичны, false если различны или переданы nullptr указатели.
 */
-API bool platform_string_nequal(const char* lstr, const char* rstr, u64 length);
+#define string_nequal(lstr, rstr, length) platform_string_nequal(lstr, rstr, length)
 
 /*
     @brief Сравнивает первые N символов двух строк без учета регистра.
-    @note Thread-safe, если строка короче указанной длины, сравнение завершится на первом нуль-терминаторе.
+    @note Если строка короче указанной длины, сравнение завершится на первом нуль-терминаторе.
     @param lstr Указатель на первую строку (должна быть валидной).
     @param rstr Указатель на вторую строку (должна быть валидной).
     @param length Количество символов для сравнения, если length = 0, строки считаются равными.
     @return true если указанные части строк идентичны (игнорируя регистр), false если различны или переданы nullptr указатели.
 */
-API bool platform_string_nequali(const char* lstr, const char* rstr, u64 length);
+#define string_nequali(lstr, rstr, length) platform_string_nequali(lstr, rstr, length)
 
 /*
     @brief Копирует нуль-терминированную строку.
     @note Копируется вся строка включая нуль-терминатор.
-    @warning Не thread-safe, вызывающая сторона должна обеспечить достаточный размер буфера назначения.
+    @warning Вызывающая сторона должна обеспечить достаточный размер буфера назначения.
     @param dst Указатель на буфер назначения (должен быть достаточно большим).
     @param src Указатель на строку-источник.
     @return Указатель на буфер назначения (dest).
 */
-API char* platform_string_copy(char* dst, const char* src);
+#define string_copy(dst, src) platform_string_copy(dst, src)
 
 /*
     @brief Копирует не более N символов строки и добавляет нуль терминатор.
     @note Если длина src меньше length, копируется вся строка включая нуль-терминатор.
-    @warning Не thread-safe, вызывающая сторона должна обеспечить достаточный размер буфера назначения.
+    @warning Вызывающая сторона должна обеспечить достаточный размер буфера назначения.
     @param dst Указатель на буфер назначения (должен быть достаточно большим).
     @param src Указатель на строку-источник.
     @param length Максимальное количество символов для копирования (включая нуль-терминатор).
     @return Указатель на буфер назначения (dest).
 */
-API char* platform_string_ncopy(char* dst, const char* src, u64 length);
+#define string_ncopy(dst, src, length) platform_string_ncopy(dst, src, length)
+
+/*
+    @brief Создает копию нуль-терминированной строки в динамической памяти.
+    @note Полученную строку необходимо освободить с помощью string_free().
+    @param str Указатель на строку для копирования. Не может быть nullptr.
+    @return Указатель на новую копию строки в памяти, или nullptr в случае ошибки.
+*/
+API char* string_duplicate(const char* str);
+
+/*
+    @brief Освобождает память, выделенную для строк функциями библиотеки.
+    @note Передача nullptr приведет к неопределенному поведению.
+    @param str Указатель на строку для освобождения. Не может быть nullptr.
+*/
+API void string_free(const char* str);
