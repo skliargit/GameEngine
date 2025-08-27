@@ -26,17 +26,17 @@
 
             if(timeBeginPeriod(timer_resolution) == TIMERR_NOERROR)
             {
-                LOG_TRACE("Timer resolution set to %u ms.", timer_resolution);
+                LOG_TRACE("Interval interrupt resolution is set to %u ms.", timer_resolution);
             }
             else
             {
-                LOG_WARN("Failed to set timer resolution. Sleep precision may be reduced.");
+                LOG_WARN("Failed to set interval interrupt resolution. Sleep accuracy may be reduced.");
                 timer_resolution = 0;
             }
         }
         else
         {
-            LOG_WARN("Failed to get timer capabilities. Sleep precision may be reduced.");
+            LOG_WARN("Failed to obtain interval interrupt capability. Sleep accuracy may be reduced.");
         }
 
         initialized = true;
@@ -48,7 +48,7 @@
         if(timer_resolution > 0)
         {
             timeEndPeriod(timer_resolution);
-            LOG_TRACE("Timer resolution restored.");
+            LOG_TRACE("Restored default interval interrupt resolution.");
         }
 
         timer_resolution = 0;

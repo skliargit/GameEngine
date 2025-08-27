@@ -8,6 +8,14 @@
     #include "debug/assert.h"
     #include <Windows.h>
 
+    // Для включения отладки для оконной системы индивидуально.
+    #ifndef DEBUG_WINDOW_FLAG
+        #undef LOG_DEBUG
+        #undef LOG_TRACE
+        #define LOG_DEBUG(...) UNUSED(0)
+        #define LOG_TRACE(...) UNUSED(0)
+    #endif
+
     typedef struct platform_window {
         HWND hwnd;
         const char* title;

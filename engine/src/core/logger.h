@@ -168,12 +168,12 @@ API void log_write(log_level level, const char* filename, u32 fileline, const ch
         @brief Макрос для логирования сообщений уровня DEBUG.
         @note Используется только в отладочных сборках для диагностики проблем.
     */
-    #define LOG_DEBUG(...) ((void)0)
+    #define LOG_DEBUG(...) UNUSED(0)
 
     /*
         @brief Макрос для логирования сообщений уровня TRACE.
         @note Используется только в отладочных сборках для детальной диагностики.
         @note Может генерировать очень много сообщений.
     */
-    #define LOG_TRACE(...) ((void)0)
+    #define LOG_TRACE(...) UNUSED(0)
 #endif

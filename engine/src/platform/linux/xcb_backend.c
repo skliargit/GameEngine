@@ -8,6 +8,14 @@
     #include <xcb/xcb.h>
     #include <stdlib.h>
 
+    // Для включения отладки для оконной системы индивидуально.
+    #ifndef DEBUG_WINDOW_FLAG
+        #undef LOG_DEBUG
+        #undef LOG_TRACE
+        #define LOG_DEBUG(...) UNUSED(0)
+        #define LOG_TRACE(...) UNUSED(0)
+    #endif
+
     typedef struct platform_window {
         xcb_window_t id;                  // Идентификатор окна XCB.
         xcb_atom_t wm_delete;             // Атом для обработки закрытия окна.

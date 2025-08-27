@@ -3,7 +3,7 @@
 COMMON_FLAGS="-fPIC"
 OBJECT_FLAGS="-fvisibility=hidden -g -Wall -Wextra -Werror -Wvla -Wreturn-type"
 LINKER_FLAGS="-shared $(pkg-config --libs xcb wayland-client vulkan)"
-DEFINE_FLAGS="-DDEBUG_FLAG -DLIB_EXPORT_FLAG"
+DEFINE_FLAGS="-DLIB_EXPORT_FLAG -DDEBUG_FLAG -DDEBUG_WINDOW_FLAG"
 INCLUDE_FLAGS="-Isrc/"
 
 SRC_DIR="src/"
