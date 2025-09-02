@@ -245,6 +245,12 @@
             [XKB_KEY_Shift_L      & 0x00ff] = KEY_LSHIFT,       [XKB_KEY_Alt_R        & 0x00ff] = KEY_RALT,
             [XKB_KEY_Shift_R      & 0x00ff] = KEY_RSHIFT,       [XKB_KEY_Alt_L        & 0x00ff] = KEY_LALT,
             [XKB_KEY_Control_L    & 0x00ff] = KEY_LCONTROL,     [XKB_KEY_Control_R    & 0x00ff] = KEY_RCONTROL,
+            [0xff9e               & 0x00ff] = KEY_NUMPAD0,      [0xff9c               & 0x00ff] = KEY_NUMPAD1,
+            [0xff99               & 0x00ff] = KEY_NUMPAD2,      [0xff9b               & 0x00ff] = KEY_NUMPAD3,
+            [0xff96               & 0x00ff] = KEY_NUMPAD4,      [0xff9d               & 0x00ff] = KEY_NUMPAD5,
+            [0xff98               & 0x00ff] = KEY_NUMPAD6,      [0xff95               & 0x00ff] = KEY_NUMPAD7,
+            [0xff97               & 0x00ff] = KEY_NUMPAD8,      [0xff9a               & 0x00ff] = KEY_NUMPAD9,
+            [0xff9f               & 0x00ff] = KEY_DECIMAL,
         };
 
         // Диапазон 0x0000-0x00FF.
