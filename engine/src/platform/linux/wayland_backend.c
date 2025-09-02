@@ -10,6 +10,7 @@
     #include "core/memory.h"
     #include "platform/linux/wayland_xdg_protocol.h"
     #include <wayland-client.h>
+    #include <xkbcommon/xkbcommon.h>
     #include <errno.h>
     #include <string.h>
     #include <fcntl.h>
@@ -17,8 +18,8 @@
     #include <sys/mman.h>
     #include <poll.h>
 
-    // Для включения отладки для оконной системы индивидуально.
-    #ifndef DEBUG_WINDOW_FLAG
+    // Для включения отладки оконной системы индивидуально.
+    #ifndef DEBUG_PLATFORM_FLAG
         #undef LOG_DEBUG
         #undef LOG_TRACE
         #define LOG_DEBUG(...) UNUSED(0)
@@ -26,37 +27,81 @@
     #endif
 
     typedef struct platform_window {
-        struct wl_display* display;       // Соединение с Wayland сервером (НАСЛЕДУЕТСЯ).
-        struct wl_surface* surface;       // Wayland поверхность окна.
-        struct xdg_surface* xsurface;     // XDG поверхность для управления.
-        struct xdg_toplevel* xtoplevel;   // XDG toplevel для оконных операций.
-        struct wl_shm* shm;               // Разделяемая память для буферов (НАСЛЕДУЕТСЯ).
-        struct wl_buffer* background;     // Временный буфер фона (до рендеринга).
-        u32 background_color;             // Цвет фона в формате ARGB (0xAARRGGBB).
-        char* title;                      // Текущий заголовок окна.
-        i32 width;                        // Текущая ширина окна в пикселях.
-        i32 height;                       // Текущая высота окна в пикселях.
-        i32 width_pending;                // Новая ширина окна, ожидающая применения.
-        i32 height_pending;               // Новая высота окна, ожидающая применения.
-        bool resize_pending;              // Флаг ожидания обработки изменения размера.
-        bool should_close;                // TODO: Флаг запроса на закрытие окна (пока что вылет с ошибкой).
-        bool focused;                     // Фокус ввода на этом окне.
+        // Соединение с Wayland сервером (НАСЛЕДУЕТСЯ).
+        struct wl_display* display;
+        // Wayland поверхность окна.
+        struct wl_surface* surface;
+        // XDG поверхность для управления.
+        struct xdg_surface* xsurface;
+        // XDG toplevel для оконных операций.
+        struct xdg_toplevel* xtoplevel;
+        // Разделяемая память для буферов (НАСЛЕДУЕТСЯ).
+        struct wl_shm* shm;
+        // Временный буфер фона (до рендеринга).
+        struct wl_buffer* background;
+        // Цвет фона в формате ARGB (0xAARRGGBB).
+        u32 background_color;
+        // Текущий заголовок окна.
+        char* title;
+        // Текущая ширина окна в пикселях.
+        i32 width;
+        // Текущая высота окна в пикселях.
+        i32 height;
+        // Новая ширина окна, ожидающая применения.
+        i32 width_pending;
+        // Новая высота окна, ожидающая применения.
+        i32 height_pending;
+        // Флаг ожидания обработки изменения размера.
+        bool resize_pending;
+        // Фокус ввода на этом окне.
+        bool focused;
+        // Callback-функция, вызываемая при попытке закрытия окна, может быть nullptr.
+        platform_window_on_close_callback on_close;
+        // Callback-функция, вызываемая при изменении размера окна, может быть nullptr.
+        platform_window_on_resize_callback on_resize;
+        // Callback-функция, вызываемая при изменении состояния фокуса окна, может быть nullptr.
+        platform_window_on_focus_callback on_focus;
+        // Callback-функция для обработки нажатий и отпусканий клавиш клавиатуры, может быть nullptr.
+        platform_window_on_key_callback on_key;
+        // Callback-функция для обработки нажатий кнопок мыши, может быть nullptr.
+        platform_window_on_mouse_button_callback on_mouse_button;
+        // Callback-функция для обработки движения курсора мыши в пределах окна, может быть nullptr.
+        platform_window_on_mouse_move_callback on_mouse_move;
+        // Callback-функция для обработки прокрутки колеса мыши, может быть nullptr.
+        platform_window_on_mouse_wheel_callback on_mouse_wheel;
     } platform_window;
 
     typedef struct wayland_client {
-        struct wl_display* display;       // Соединение с Wayland сервером.
-        struct wl_registry* registry;     // Регистратор глобальных объектов.
-        struct wl_compositor* compositor; // Композитор для создания поверхностей.
-        struct xdg_wm_base* xbase;        // XDG базовый протокол для окон.
-        struct wl_shm* shm;               // Разделяемая память для буферов.
-        struct wl_seat* seat;             // Устройства ввода (клавиатура, мышь).
-        struct wl_keyboard* keyboard;     // Клавиатура для обработки ввода.
-        struct wl_pointer* pointer;       // Мышка для обработки ввода.
-        struct pollfd poll_fd[1];         // Файловые дескрипторы для poll().
-        nfds_t poll_fd_count;             // Количество отслеживаемых дескрипторов.
-        i32 displayfd;                    // Файловый дескриптор Wayland соединения.
-        platform_window* focused_window;  // TODO: Окно с текущим фокусом ввода.
-        platform_window* window;          // TODO: Динамический массив всех окон (пока только одно окно).
+        // Соединение с Wayland сервером.
+        struct wl_display* display;
+        // Регистратор глобальных объектов.
+        struct wl_registry* registry;
+        // Композитор для создания поверхностей.
+        struct wl_compositor* compositor;
+        // XDG базовый протокол для окон.
+        struct xdg_wm_base* xbase;
+        // Разделяемая память для буферов.
+        struct wl_shm* shm;
+        // Устройства ввода (клавиатура, мышь).
+        struct wl_seat* seat;
+        // Клавиатура для обработки ввода.
+        struct wl_keyboard* keyboard;
+        // Мышка для обработки ввода.
+        struct wl_pointer* pointer;
+        // Контекст библиотеки XKBcommon для обработки раскладки клавиатуры.
+        struct xkb_context* xkbcontext;
+        // Состояние XKB (текущая раскладка, модификаторы, заблокированные клавиши).
+        struct xkb_state* xkbstate;
+        // Файловые дескрипторы для poll().
+        struct pollfd poll_fd[1];
+        // Количество отслеживаемых дескрипторов.
+        nfds_t poll_fd_count;
+        // Файловый дескриптор Wayland соединения.
+        i32 displayfd;
+        // TODO: Окно с текущим фокусом ввода.
+        platform_window* focused_window;
+        // TODO: Динамический массив всех окон (пока только одно окно).
+        platform_window* window;
     } wayland_client;
 
     // Объявление функции для создания буфера.
@@ -168,11 +213,18 @@
 
         if(!client->seat)
         {
-            LOG_WARN("No seat interface found - input devices won't be available.");
+            LOG_ERROR("Failed to bind 'seat' interface - input devices not available.");
+            wayland_backend_shutdown(client);
+            return false;
         }
-        else
+
+        // Получение контекста XKBCommon.
+        client->xkbcontext = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+        if(!client->xkbcontext)
         {
-            LOG_TRACE("Seat interface available.");
+            LOG_ERROR("Failed to obtain XKB context.");
+            wayland_backend_shutdown(client);
+            return false;
         }
 
         LOG_TRACE("Wayland backend initialized successfully.");
@@ -194,6 +246,8 @@
             // NOTE: Осовобождение client->window в wayland_backend_window_destroy().
         }
 
+        if(client->xkbstate)   xkb_state_unref(client->xkbstate);
+        if(client->xkbcontext) xkb_context_unref(client->xkbcontext);
         if(client->pointer)    wl_pointer_destroy(client->pointer);
         if(client->keyboard)   wl_keyboard_destroy(client->keyboard);
         if(client->seat)       wl_seat_destroy(client->seat);
@@ -215,14 +269,6 @@
     bool wayland_backend_poll_events(void* internal_data)
     {
         wayland_client* client = internal_data;
-
-        // TODO: Временная мера!
-        // Проверка на закрытие окна
-        if(client->window->should_close)
-        {
-            LOG_TRACE("Window close requested, stopping event loop.");
-            return false;
-        }
 
         // Проверка очереди событий (0 - пустая очередь, -1 - непуста).
         // NOTE: Если очередь оказывается непустой, то операцию чтение выполнять или отменять не нужно!
@@ -291,6 +337,13 @@
         // NOTE: Нет смысла, т.к. после обмена сообщениями с композитором он установит новые значения!
         // window->width = (i32)config->width;
         // window->height = (i32)config->height;
+        window->on_close = config->on_close;
+        window->on_resize = config->on_resize;
+        window->on_focus = config->on_focus;
+        window->on_key = config->on_key;
+        window->on_mouse_button = config->on_mouse_button;
+        window->on_mouse_move = config->on_mouse_move;
+        window->on_mouse_wheel = config->on_mouse_wheel;
 
         // Инициализация поверхности окна.
         window->surface = wl_compositor_create_surface(client->compositor);
@@ -358,7 +411,6 @@
         static const u32 shm_version = 1;
         wayland_client* client = data;
 
-        // TODO: Ограничить вывод списка сообщений идним полным проходом?
         LOG_TRACE("[%02u] %s (version %u).", name, interface, version);
 
         if(string_equal(interface, wl_compositor_interface.name))
@@ -402,7 +454,7 @@
         UNUSED(data);
         UNUSED(registry);
 
-        // NOTE: Происходит при удалении мышки, монитора, клавиатуры, графического планшета.
+        // NOTE: Происходит при удалении мыши, монитора, клавиатуры, графического планшета.
         LOG_TRACE("Wayland has not yet supported remove this event (id %02u).", name);
     }
 
@@ -410,7 +462,7 @@
     {
         UNUSED(data);
 
-        // NOTE: Ping/pong механизм проверяет доступность всего Wayland соединения.
+        // Ping/pong механизм проверяет доступность всего Wayland соединения.
         xdg_wm_base_pong(xbase, serial);
     }
 
@@ -424,9 +476,13 @@
 
         if(window->resize_pending)
         {
-            LOG_TRACE("Resize event for window '%s' to %dx%d.", window->title, window->width_pending, window->height_pending);
+            LOG_TRACE("Resize event: window='%s' to %dx%d.", window->title, window->width_pending, window->height_pending);
 
-            // TODO: Вызов обработчика изменения размера буфера.
+            // Вызов обработчика изменения размера буфера.
+            if(window->on_resize)
+            {
+                window->on_resize(window->width_pending, window->height_pending);
+            }
 
             // TODO: Запретить обновлять при рендере!
             // Пересоздание буфера с новым размером, но только если он был создан.
@@ -469,8 +525,12 @@
 
         // TODO: Закрывать только когда фокус на окне!
         platform_window* window = data;
-        window->should_close = true;
-        LOG_TRACE("Close event for window '%s'.", window->title);
+        LOG_TRACE("Close event: window='%s'.", window->title);
+
+        if(window->on_close)
+        {
+            window->on_close();
+        }
     }
 
     void xtoplevel_configure_bounds(void* data, struct xdg_toplevel* xtoplevel, i32 width, i32 height)
@@ -541,6 +601,49 @@
         UNUSED(format);
         UNUSED(fd);
         UNUSED(size);
+
+        wayland_client* client = data;
+        if(format != WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1)
+        {
+            LOG_FATAL("No keymap format.");
+            close(fd);
+            return;
+        }
+
+        char* keymap_str = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
+        if(keymap_str == MAP_FAILED)
+        {
+            LOG_FATAL("Failed mapped keymap.");
+            close(fd);
+            return;
+        }
+
+        struct xkb_keymap* keymap = xkb_keymap_new_from_string(
+            client->xkbcontext, keymap_str, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS
+        );
+        munmap(keymap_str, size);
+        close(fd);
+
+        if(!keymap)
+        {
+            return;
+        }
+
+        // Создание состояния xkb.
+        if(client->xkbstate)
+        {
+            xkb_state_unref(client->xkbstate);
+        }
+        client->xkbstate = xkb_state_new(keymap);
+
+    #ifdef DEBUG_PLATFORM_FLAG
+        xkb_keycode_t min = xkb_keymap_min_keycode(keymap);
+        xkb_keycode_t max = xkb_keymap_max_keycode(keymap);
+        LOG_TRACE("Keycode range %u...%u.", min, max);
+    #endif
+
+        xkb_keymap_unref(keymap);
+        LOG_TRACE("Keyboard keymap event.");
     }
 
     void kb_enter(void* data, struct wl_keyboard* keyboard, u32 serial, struct wl_surface* surface, struct wl_array* keys)
@@ -550,6 +653,22 @@
         UNUSED(serial);
         UNUSED(surface);
         UNUSED(keys);
+
+        // TODO: Найти окно которому принадлежит surface!
+        // if(client->window->surface == surface)
+        // {
+        //     client->focused_window = client->window;
+        //     client->window->focused = true;
+        //     LOG_TRACE("Window '%s' focused.", client->window->title);
+        // }
+
+        wayland_client* client = data;
+        LOG_TRACE("Window '%s' focused.", client->window->title);
+
+        if(client->window->on_focus)
+        {
+            client->window->on_focus(true);
+        }
     }
 
     void kb_leave(void* data, struct wl_keyboard* keyboard, u32 serial, struct wl_surface* surface)
@@ -558,18 +677,92 @@
         UNUSED(keyboard);
         UNUSED(serial);
         UNUSED(surface);
+
+        // TODO: Найти окно которому принадлежит surface!
+        // if(client->window->surface == surface)
+        // {
+        //     client->window->focused = false;
+        //     if(client->focused_window == client->window)
+        //     {
+        //         client->focused_window = nullptr;
+        //     }
+        //     LOG_TRACE("Window '%s' lost focus.", client->window->title);
+        // }
+
+        wayland_client* client = data;
+        LOG_TRACE("Window '%s' lost focus.", client->window->title);
+
+        if(client->window->on_focus)
+        {
+            client->window->on_focus(false);
+        }
+    }
+
+    static keyboard_key translate_key(u32 scancode)
+    {
+        // Таблица трансляции нормализованных evdev scancode -> virtual keycode. См. linux/input-event-codes.h
+        static const keyboard_key codes[KEY_COUNT] = {
+            [0x01] = KEY_ESCAPE,       [0x02] = KEY_1,            [0x03] = KEY_2,            [0x04] = KEY_3,
+            [0x05] = KEY_4,            [0x06] = KEY_5,            [0x07] = KEY_6,            [0x08] = KEY_7,
+            [0x09] = KEY_8,            [0x0A] = KEY_9,            [0x0B] = KEY_0,            [0x0C] = KEY_MINUS,
+            [0x0D] = KEY_EQUAL,        [0x0E] = KEY_BACKSPACE,    [0x0F] = KEY_TAB,          [0x10] = KEY_Q,
+            [0x11] = KEY_W,            [0x12] = KEY_E,            [0x13] = KEY_R,            [0x14] = KEY_T,
+            [0x15] = KEY_Y,            [0x16] = KEY_U,            [0x17] = KEY_I,            [0x18] = KEY_O,
+            [0x19] = KEY_P,            [0x1A] = KEY_LBRACKET,     [0x1B] = KEY_RBRACKET,     [0x1C] = KEY_RETURN,
+            [0x1D] = KEY_LCONTROL,     [0x1E] = KEY_A,            [0x1F] = KEY_S,            [0x20] = KEY_D,
+            [0x21] = KEY_F,            [0x22] = KEY_G,            [0x23] = KEY_H,            [0x24] = KEY_J,
+            [0x25] = KEY_K,            [0x26] = KEY_L,            [0x27] = KEY_SEMICOLON,    [0x28] = KEY_APOSTROPHE,
+            [0x29] = KEY_GRAVE,        [0x2A] = KEY_LSHIFT,       [0x2B] = KEY_BACKSLASH,    [0x2C] = KEY_Z,
+            [0x2D] = KEY_X,            [0x2E] = KEY_C,            [0x2F] = KEY_V,            [0x30] = KEY_B,
+            [0x31] = KEY_N,            [0x32] = KEY_M,            [0x33] = KEY_COMMA,        [0x34] = KEY_DOT,
+            [0x35] = KEY_SLASH,        [0x36] = KEY_RSHIFT,       [0x37] = KEY_MULTIPLY,     [0x38] = KEY_LALT,
+            [0x39] = KEY_SPACE,        [0x3A] = KEY_CAPSLOCK,     [0x3B] = KEY_F1,           [0x3C] = KEY_F2,
+            [0x3D] = KEY_F3,           [0x3E] = KEY_F4,           [0x3F] = KEY_F5,           [0x40] = KEY_F6,
+            [0x41] = KEY_F7,           [0x42] = KEY_F8,           [0x43] = KEY_F9,           [0x44] = KEY_F10,
+            [0x45] = KEY_NUMLOCK,      [0x46] = KEY_SCROLLLOCK,   [0x47] = KEY_NUMPAD7,      [0x48] = KEY_NUMPAD8,
+            [0x49] = KEY_NUMPAD9,      [0x4A] = KEY_SUBTRACT,     [0x4B] = KEY_NUMPAD4,      [0x4C] = KEY_NUMPAD5,
+            [0x4D] = KEY_NUMPAD6,      [0x4E] = KEY_ADD,          [0x4F] = KEY_NUMPAD1,      [0x50] = KEY_NUMPAD2,
+            [0x51] = KEY_NUMPAD3,      [0x52] = KEY_NUMPAD0,      [0x53] = KEY_DECIMAL,      [0x57] = KEY_F11,
+            [0x58] = KEY_F12,          [0x60] = KEY_RETURN,       [0x61] = KEY_RCONTROL,     [0x62] = KEY_DIVIDE,
+            [0x63] = KEY_PRINTSCREEN,  [0x64] = KEY_RALT,         [0x66] = KEY_HOME,         [0x67] = KEY_UP,
+            [0x68] = KEY_PAGEUP,       [0x69] = KEY_LEFT,         [0x6A] = KEY_RIGHT,        [0x6B] = KEY_END,
+            [0x6C] = KEY_DOWN,         [0x6D] = KEY_PAGEDOWN,     [0x6E] = KEY_INSERT,       [0x6F] = KEY_DELETE,
+            [0x77] = KEY_PAUSE,        [0x7D] = KEY_LSUPER,       [0x7E] = KEY_RSUPER,       [0x7F] = KEY_MENU,
+            [0x8e] = KEY_SLEEP,        [0xB7] = KEY_F13,          [0xB8] = KEY_F14,          [0xB9] = KEY_F15,
+            [0xBA] = KEY_F16,          [0xBB] = KEY_F17,          [0xBC] = KEY_F18,          [0xBD] = KEY_F19,
+            [0xBE] = KEY_F20,          [0xBF] = KEY_F21,          [0xC0] = KEY_F22,          [0xC1] = KEY_F23,
+            [0xC2] = KEY_F24,
+        };
+
+        if(scancode >= KEY_COUNT)
+        {
+            return KEY_UNKNOWN;
+        }
+
+        return codes[scancode];
     }
 
     void kb_key(void* data, struct wl_keyboard* keyboard, u32 serial, u32 time, u32 key, u32 state)
     {
-        UNUSED(data);
         UNUSED(keyboard);
         UNUSED(serial);
         UNUSED(time);
-        UNUSED(key);
-        UNUSED(state);
 
-        LOG_TRACE("Key event.");
+        wayland_client* client = data;
+        keyboard_key vkey = translate_key(key);
+        // xkb_keysym_t keysym = xkb_state_key_get_one_sym(client->xkbstate, key + 8);
+
+        if(vkey == KEY_UNKNOWN)
+        {
+            LOG_WARN("Keyboard key event: Unknown scancode=0x%x (%d), state=%d.", key, key, state);
+            return;
+        }
+
+        LOG_TRACE("Keyboard key event: scancode=0x%x (%d), state=%d, window='%s'.", key, key, state, client->window->title);
+        if(client->window->on_key)
+        {
+            client->window->on_key(vkey, state == WL_KEYBOARD_KEY_STATE_PRESSED);
+        }
     }
 
     void kb_mods(void* data, struct wl_keyboard* keyboard, u32 serial, u32 depressed, u32 latched, u32 locked, u32 group)
@@ -599,18 +792,6 @@
         UNUSED(surface);
         UNUSED(x);
         UNUSED(y);
-
-        // TODO: Найти окно которому принадлежит surface!
-        // if(client->window->surface == surface)
-        // {
-        //     client->focused_window = client->window;
-        //     client->window->focused = true;
-        //     LOG_TRACE("Window '%s' focused.", client->window->title);
-        // }
-
-        wayland_client* client = data;
-        UNUSED(client);
-        LOG_TRACE("Window '%s' focused.", client->window->title);
     }
 
     void pt_leave(void* data, struct wl_pointer* pointer, u32 serial, struct wl_surface* surface)
@@ -619,21 +800,6 @@
         UNUSED(pointer);
         UNUSED(serial);
         UNUSED(surface);
-
-        // TODO: Найти окно которому принадлежит surface!
-        // if(client->window->surface == surface)
-        // {
-        //     client->window->focused = false;
-        //     if(client->focused_window == client->window)
-        //     {
-        //         client->focused_window = nullptr;
-        //     }
-        //     LOG_TRACE("Window '%s' has lost focus.", client->window->title);
-        // }
-
-        wayland_client* client = data;
-        UNUSED(client);
-        LOG_TRACE("Window '%s' has lost focus.", client->window->title);
     }
 
     void pt_motion(void* data, struct wl_pointer* pointer, u32 time, wl_fixed_t x, wl_fixed_t y)
@@ -644,7 +810,33 @@
         UNUSED(x);
         UNUSED(y);
 
-        // LOG_TRACE("Motion event.");
+        wayland_client* client = data;
+        i32 position_x = wl_fixed_to_int(x);
+        i32 position_y = wl_fixed_to_int(y);
+
+        // LOG_TRACE("Motion event to %dx%d for '%s' window.", position_x, position_y, client->window->title);
+        if(client->window->on_mouse_move)
+        {
+            client->window->on_mouse_move(position_x, position_y);
+        }
+    }
+
+    static mouse_button translate_button(u32 scancode)
+    {
+        // В целях оптимизации (коды кнопок 0x110...0x114).
+        scancode -= 0x110;
+
+        // Таблица трансляции нормализованных evdev scancode -> virtual button code. См. linux/input-event-codes.h
+        static const mouse_button codes[BTN_COUNT - 1] = {
+            [0x00] = BTN_LEFT, [0x01] = BTN_RIGHT, [0x02] = BTN_MIDDLE, [0x03] = BTN_BACKWARD, [0x04] = BTN_FORWARD
+        };
+
+        if(scancode >= (BTN_COUNT - 1))
+        {
+            return BTN_UNKNOWN;
+        }
+
+        return codes[scancode];
     }
 
     void pt_button(void* data, struct wl_pointer* pointer, u32 serial, u32 time, u32 button, u32 state)
@@ -656,7 +848,20 @@
         UNUSED(button);
         UNUSED(state);
 
-        LOG_TRACE("Button event.");
+        wayland_client* client = data;
+        mouse_button vbutton = translate_button(button);
+
+        if(vbutton == BTN_UNKNOWN)
+        {
+            LOG_WARN("Mouse button event: unknown scancode=0x%x (%d), state=%d.", button, button, state);
+            return;
+        }
+
+        LOG_TRACE("Mouse button event: scancode=0x%x (%d), state=%d, window='%s'.", button, button, state, client->window->title);
+        if(client->window->on_mouse_button)
+        {
+            client->window->on_mouse_button(vbutton, state == WL_POINTER_BUTTON_STATE_PRESSED);
+        }
     }
 
     void pt_axis(void* data, struct wl_pointer* pointer, u32 time, u32 axis, wl_fixed_t value)
@@ -695,6 +900,31 @@
         UNUSED(pointer);
         UNUSED(axis);
         UNUSED(discrete);
+
+        wayland_client* client = data;
+        i32 vertical_delta = 0;
+        i32 horizontal_delta = 0;
+
+        if(axis == WL_POINTER_AXIS_VERTICAL_SCROLL)
+        {
+            vertical_delta = -discrete;
+        }
+        else if(axis == WL_POINTER_AXIS_HORIZONTAL_SCROLL)
+        {
+            // TODO: Необходимо протестировать! Нет реального устройства.
+            horizontal_delta = discrete;
+        }
+        else
+        {
+            LOG_WARN("Mouse wheel event: unsupported axis - %u.", axis);
+            return;
+        }
+        
+        LOG_TRACE("Mouse wheel event: vertical delta=%i, horizontal delta=%i.", vertical_delta, horizontal_delta);
+        if(client->window->on_mouse_wheel)
+        {
+            client->window->on_mouse_wheel(vertical_delta, horizontal_delta);
+        }
     }
 
     void pt_axis_value120(void* data, struct wl_pointer* pointer, u32 axis, i32 value120)

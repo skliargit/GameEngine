@@ -13,7 +13,7 @@
 
 typedef struct log_system_context {
     log_level level;
-    log_handler_pfn handler;
+    log_handler_callback handler;
     const void* user_data;
 } log_system_context;
 
@@ -41,7 +41,7 @@ void log_set_level(log_level level)
     context.level = level;
 }
 
-void log_set_handler(log_handler_pfn handler, const void* user_data)
+void log_set_handler(log_handler_callback handler, const void* user_data)
 {
     // TODO: Потокобезопасность.
     context.handler = handler;

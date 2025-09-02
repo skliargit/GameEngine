@@ -3,6 +3,7 @@
 int main()
 {
     application_config config = {0};
+    config.window.backend = PLATFORM_WINDOW_BACKEND_TYPE_AUTO;
     config.window.title  = "Simple window";
     config.window.width  = 1024;
     config.window.height = 768;

@@ -4,7 +4,7 @@ setlocal EnableDelayedExpansion
 set COMMON_FLAGS=-fdeclspec
 set OBJECT_FLAGS=-g -Wall -Wextra -Werror -Wvla -Wreturn-type
 set LINKER_FLAGS=-shared -luser32 -lgdi32 -lwinmm
-set DEFINE_FLAGS=-DLIB_EXPORT_FLAG -DDEBUG_FLAG -DDEBUG_WINDOW_FLAG
+set DEFINE_FLAGS=-DLIB_EXPORT_FLAG -DDEBUG_FLAG -DDEBUG_PLATFORM_FLAG
 set INCLUDE_FLAGS=-Isrc\
 
 set SRC_DIR=src\

@@ -4,6 +4,7 @@
 
     #include "core/logger.h"
     #include "debug/assert.h"
+    #include "core/timer.h"
     #include <windows.h>
 
     static LARGE_INTEGER start = {0};

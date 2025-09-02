@@ -55,6 +55,7 @@ echo ">>> Checking libraries..."
 check_lib vulkan
 check_lib xcb
 check_lib wayland-client
+check_lib xkbcommon
 
 [ "$tool_missing" = true ] && exit 1
 [ "$lib_missing" = true ]  && exit 1

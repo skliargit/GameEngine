@@ -1,9 +1,7 @@
 #include "core/memory.h"
 #include "core/logger.h"
 #include "core/string.h"
-
 #include "debug/assert.h"
-
 #include "platform/memory.h"
 
 typedef struct memory_stats {
@@ -55,6 +53,11 @@ void memory_system_shutdown()
     context = nullptr;
 }
 
+bool memory_system_is_initialized()
+{
+    return context != nullptr;
+}
+
 const char* memory_system_usage_str()
 {
     ASSERT(context != nullptr, "Memory system not initialized. Call memory_system_initialize() first.");
@@ -79,7 +82,7 @@ const char* memory_system_usage_str()
     memory_get_format(context->stats.total_allocated, &used);
 
     // Запись статистики использования памяти в буфер.
-    i32 length = string_format(buffer + offset, buffer_length, "Total memory usage: %.2f %s\n", used.amount, used.name);
+    i32 length = string_format(buffer + offset, buffer_length, "Total memory usage: %.2f %s\n", used.amount, used.unit);
 
     // Обновление смещения для записи следующей строки.
     offset += length;
@@ -90,7 +93,7 @@ const char* memory_system_usage_str()
     memory_get_format(context->stats.peak_allocated, &peak);
 
     // Запись пикового использования памяти.
-    length = string_format(buffer + offset, buffer_length, "Peak memory usgae: %.2f %s\n", peak.amount, peak.name);
+    length = string_format(buffer + offset, buffer_length, "Peak memory usgae: %.2f %s\n", peak.amount, peak.unit);
 
     // Обновление смещения для записи следующей строки.
     offset += length;
@@ -111,7 +114,7 @@ const char* memory_system_usage_str()
         memory_get_format(context->stats.tagged_allocated[i], &mtag);
 
         // Запись строки тега и его значение в буфер.
-        length = string_format(buffer + offset, buffer_length, "  %s: %7.2f %s\n", tag_names[i], mtag.amount, mtag.name);
+        length = string_format(buffer + offset, buffer_length, "  %s: %7.2f %s\n", tag_names[i], mtag.amount, mtag.unit);
 
         // Обновление смещения для записи следующей строки.
         offset += length;
@@ -167,22 +170,22 @@ void memory_get_format(u64 size, memory_format* out_format)
 {
     if(size < 1 KiB)
     {
-        out_format->name = "B";
+        out_format->unit = "B";
         out_format->amount = (f32)size;
     }
     else if(size < 1 MiB)
     {
-        out_format->name = "KiB";
+        out_format->unit = "KiB";
         out_format->amount = (f32)size / (1 KiB);
     }
     else if(size < 1 GiB)
     {
-        out_format->name = "MiB";
+        out_format->unit = "MiB";
         out_format->amount = (f32)size / (1 MiB);
     }
     else
     {
-        out_format->name = "GiB";
+        out_format->unit = "GiB";
         out_format->amount = (f32)size / (1 GiB);
     }
 }
