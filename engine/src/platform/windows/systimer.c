@@ -2,9 +2,8 @@
 
 #ifdef PLATFORM_WINDOWS_FLAG
 
-    #include "core/logger.h"
     #include "debug/assert.h"
-    #include "core/timer.h"
+    #include "core/logger.h"
     #include <windows.h>
 
     static LARGE_INTEGER start = {0};
@@ -13,32 +12,23 @@
 
     bool platform_systimer_initialize()
     {
-        if(initialized)
-        {
-            return true;
-        }
+        ASSERT(initialized == false, "Timer subsystem is already initialized.");
 
         if(!QueryPerformanceFrequency(&freq))
         {
-            LOG_FATAL("Windows high-resolution timer (QPC) is not available.");
+            LOG_ERROR("Windows high-resolution timer (QPC) is not available.");
             return false;
         }
 
         if(!QueryPerformanceCounter(&start))
         {
-            LOG_FATAL("Windows high-resolution timer (QPC) failed to initialize.");
+            LOG_ERROR("Windows high-resolution timer (QPC) failed to initialize.");
             return false;
         }
 
         LOG_TRACE("Windows high-resolution timer (QPC) initialized with frequency: %llu Hz.", freq.QuadPart);
+
         initialized = true;
-
-        volatile f64 t1 = platform_systimer_now();
-        volatile f64 t2 = platform_systimer_now();
-        timer_format resolution;
-        timer_get_format(t2 - t1, &resolution);
-        LOG_TRACE("Timer resolution: ~%f%s.", resolution.amount, resolution.unit);
-
         return true;
     }
 
@@ -56,7 +46,7 @@
 
     f64 platform_systimer_now()
     {
-        ASSERT(initialized == true, "Platform subsystem timer not initialized. Call platform_systimer_initialize() first.");
+        ASSERT(initialized == true, "Timer subsystem not initialized. Call platform_systimer_initialize() first.");
 
         LARGE_INTEGER now;
         QueryPerformanceCounter(&now);

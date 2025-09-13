@@ -3,7 +3,6 @@
 #include "core/logger.h"
 #include "core/timer.h"
 #include "core/memory.h"
-#include "core/string.h"
 #include "core/input.h"
 
 #include "debug/assert.h"
@@ -13,205 +12,29 @@
 #include "platform/thread.h"
 #include "platform/window.h"
 
-// TODO: Вынести в пространство пользователя.
-typedef struct application_frame_stats {
-    f64 window_time;        // Время оконных операций.
-    f64 render_timr;        // Время рендера (в данный момент вывод нашей статистики).
-    f64 frame_time;         // Время всего кадра.
-    f64 sleep_time;         // Время необходимого сна (оставшееся время до конца кадра).
-    f64 sleep_actual_time;  // Реальное время сна.
-    f64 sleep_error_time;   // Ошибка сна (+ пересып / - недосып).
-    u64 current_fps;        // Количество кадров в секунду.
-} application_frame_stats;
-
 typedef struct application_context {
+    // Указатель на контекст окна приложения.
     platform_window* window;
-    bool is_running;
-    bool is_suspended;
-
-    // Настройки тайминга.
-    // TODO: Конфигурируемый.
-    f64 target_frame_time;  // Установленное время кадра.
-
-    // Статистика производительности.
+    // Целевое время кадра в секундах для ограничения FPS.
+    f64 target_frame_time;
+    // Статистика производительности за последний завершенный кадр.
     application_frame_stats frame_stats;
+    // Флаг выполнения главного цикла приложения.
+    bool is_running;
+    // Флаг приостановки работы приложения.
+    bool is_suspended;
+    // @brief Callback-функция, вызываемая при изменении размеров окна.
+    application_resize_callback on_resize;
+    // @brief Callback-функиця, вызываемая при обновлении логики приложения.
+    application_update_callback update;
+    // @brief Callback-функция, вызываемая при отрисовке кадра.
+    application_render_callback render;
+    // @brief Callback-функция, вызываемая при завершении работы проложения.
+    application_shutdown_callback shutdown;
 } application_context;
 
 // Контекст приложения.
 static application_context* context = nullptr;
-
-// Обработчики событий окна.
-static void application_on_close();
-static void application_on_resize(const u32 new_width, const u32 new_height);
-static void application_on_focus(const bool focus_state);
-static void application_on_key(const keyboard_key key, const bool press_state);
-static void application_on_mouse_button(const mouse_button btn, const bool press_state);
-static void application_on_mouse_move(const i32 x, const i32 y);
-static void application_on_mouse_wheel(const i32 vertical_delta, const i32 horizontal_delta);
-
-bool application_initialize(const application_config* config)
-{
-    ASSERT(context == nullptr, "Application layer is already initialized.");
-    ASSERT(config != nullptr, "Requires a valid configuration pointer.");
-
-    platform_console_initialize();
-    platform_memory_initialize();
-    platform_systimer_initialize();
-    platform_thread_initialize();
-    memory_system_initialize();
-    input_system_initialize();
-    // TODO: Конфигурируемый.
-    platform_window_initialize(config->window.backend);
-
-    context = mallocate(sizeof(application_context), MEMORY_TAG_APPLICATION);
-    if(!context)
-    {
-        LOG_ERROR("Failed to allocate memory for application context.");
-        return false;
-    }
-    mzero(context, sizeof(application_context));
-
-    platform_window_config wincfg = {
-        .title = config->window.title,
-        .width = config->window.width,
-        .height = config->window.height,
-        .on_close = application_on_close,
-        .on_resize = application_on_resize,
-        .on_focus = application_on_focus,
-        .on_key = application_on_key,
-        .on_mouse_button = application_on_mouse_button,
-        .on_mouse_move = application_on_mouse_move,
-        .on_mouse_wheel = application_on_mouse_wheel
-    };
-
-    context->window = platform_window_create(&wincfg);
-    if(!context->window)
-    {
-        LOG_ERROR("Failed to create application window.");
-        mfree(context, sizeof(application_context), MEMORY_TAG_APPLICATION);
-        context = nullptr;
-        return false;
-    }
-
-    // Инициализация настроек тайминга по умолчанию.
-    // NOTE: Для снятия ограничений установить более 1000.0
-    context->target_frame_time = 1.0 / 60.0;
-
-    // Инициализация состояний.
-    context->is_running = true;
-    context->is_suspended = false;
-
-    return true;
-}
-
-void application_shutdown()
-{
-    ASSERT(context != nullptr, "Application should be initialized before shutdown.");
-
-    platform_window_destroy(context->window);
-    context->window = nullptr;
-
-    mfree(context, sizeof(application_context), MEMORY_TAG_APPLICATION);
-    context = nullptr;
-
-    platform_window_shutdown();
-    input_system_shutdown();
-    memory_system_shutdown();
-    platform_thread_shutdown();
-    platform_systimer_shutdown();
-    platform_memory_shutdown();
-    platform_console_shutdown();
-}
-
-void application_run()
-{
-    ASSERT(context != nullptr, "Application should be initialized before running.");
-
-    // Тайминги управления кадром.
-    timer frame_timer, game_timer;
-    timer_init(&frame_timer);
-    timer_init(&game_timer);
-
-    // Запуск таймеров.
-    timer_start(&frame_timer);
-    timer_start(&game_timer);
-
-    application_frame_stats frame_stats = {0};
-    f64 last_time = timer_elapsed(&game_timer);
-    f64 frame_time_accumulator = 0.0;
-    u64 frame_count = 0;
-
-    while(context->is_running)
-    {
-        timer_restart(&frame_timer);
-
-        if(!platform_window_poll_events())
-        {
-            LOG_ERROR("Failed to process window events.");
-            break;
-        }
-
-        // Время обработки пользовательского ввода, и др. событий окна.
-        frame_stats.window_time = timer_elapsed(&frame_timer);
-
-        // Обновление игрового времени (всегда).
-        f64 current_time = timer_elapsed(&game_timer);
-        f64 delta_time = current_time - last_time;
-        last_time = current_time;
-
-        // Сбор статистики FPS.
-        frame_count++;
-        frame_time_accumulator += delta_time;
-
-        // Обновление статистики FPS.
-        if(frame_time_accumulator >= 1.0)
-        {
-            frame_stats.current_fps = frame_count;
-            frame_time_accumulator -= 1.0;
-            frame_count = 0;
-        }
-
-        if(!context->is_suspended)
-        {
-            // TODO: Обновление игровой логики.
-            // TODO: Отрисовка кадра (рендерер).
-
-            // TODO: Добавить обновление игровой логики, физики. А пока что общее время.
-            frame_stats.render_timr = timer_elapsed(&frame_timer) - frame_stats.window_time;
-        }
-
-        // Время кадра и расчет времени сна с поправкой на ошибку.
-        frame_stats.frame_time = timer_elapsed(&frame_timer);
-        frame_stats.sleep_time = context->target_frame_time - frame_stats.frame_time - frame_stats.sleep_error_time;
-        frame_stats.sleep_error_time = 0.0;
-
-        if(frame_stats.sleep_time >= 0.001)
-        {
-            // Возвращение управления операционной система, время сна.
-            platform_thread_sleep((u32)(frame_stats.sleep_time * 1000.0));
-
-            // Вычисление ошибки c ограничением в разумных пределах.
-            frame_stats.sleep_actual_time = timer_elapsed(&frame_timer) - frame_stats.frame_time;
-            frame_stats.sleep_error_time = frame_stats.sleep_actual_time - frame_stats.sleep_time;
-            frame_stats.sleep_error_time = CLAMP(
-                frame_stats.sleep_error_time, -context->target_frame_time * 0.5, context->target_frame_time * 0.5
-            );
-        }
-
-        // Для корректного отображения статистики кадра.
-        context->frame_stats = frame_stats;
-
-        // TODO: Удалить после тестирования.
-        i32 wheel_delta;
-        if(input_mouse_wheel_vertical(&wheel_delta))
-        {
-            LOG_DEBUG("Wheel delta %i.", wheel_delta);
-        }
-
-        // Обновление состояния игрового ввода только после кадра.
-        input_system_update();
-    }
-}
 
 void application_on_close()
 {
@@ -219,9 +42,10 @@ void application_on_close()
     context->is_running = false;
 }
 
-void application_on_resize(const u32 new_width, const u32 new_height)
+void application_on_resize(const u32 width, const u32 height)
 {
-    LOG_TRACE("Resize event to %dx%d.", new_width, new_height);
+    LOG_TRACE("Resize event to %dx%d.", width, height);
+    context->on_resize(width, height);
 }
 
 void application_on_focus(const bool focus_state)
@@ -246,36 +70,8 @@ void application_on_key(const keyboard_key key, const bool press_state)
     {
         LOG_TRACE("Key '%s' release event.", input_key_to_str(key));
     }
+
     input_keyboard_key_update(key, press_state);
-
-    // TODO: Временно.
-    if(key == 'F' && press_state)
-    {
-        timer_format window_ft, render_ft, frame_ft, sleep_ft, sleep_actual_ft, sleep_error_ft;
-        timer_get_format(context->frame_stats.window_time, &window_ft);
-        timer_get_format(context->frame_stats.render_timr, &render_ft);
-        timer_get_format(context->frame_stats.frame_time, &frame_ft);
-        timer_get_format(context->frame_stats.sleep_time, &sleep_ft);
-        timer_get_format(context->frame_stats.sleep_actual_time, &sleep_actual_ft);
-        timer_get_format(context->frame_stats.sleep_error_time, &sleep_error_ft);
-
-        LOG_DEBUG(
-            "Frame stats:\n\nWindow time %.2f%s\nRender time %.2f%s\nFrame time %.2f%s\nSleep time %.2f%s\nReally sleep time %.2f%s\nError sleep time %.2f%s\nCurrent FPS %llu\n",
-            window_ft.amount, window_ft.unit, render_ft.amount, render_ft.unit, frame_ft.amount, frame_ft.unit, sleep_ft.amount,
-            sleep_ft.unit, sleep_actual_ft.amount, sleep_actual_ft.unit, sleep_error_ft.amount, sleep_error_ft.unit, context->frame_stats.current_fps
-        );
-    }
-    else if(key == 'M' && press_state)
-    {
-        // TODO: Временно.
-        const char* meminfo = memory_system_usage_str();
-        LOG_TRACE(meminfo);
-        string_free(meminfo);
-    }
-    else if(key == 'Q' && press_state)
-    {
-        context->is_running = false;
-    }
 }
 
 void application_on_mouse_button(const mouse_button btn, const bool press_state)
@@ -318,4 +114,334 @@ void application_on_mouse_wheel(const i32 vertical_delta, const i32 horizontal_d
     }
 
     input_mouse_wheel_update(vertical_delta, horizontal_delta);
+}
+
+bool application_initialize(const application_config* config)
+{
+    // NOTE: Ошибка утверждения на данном этапе говорит о том, что консоль успешно инициализирована.
+    ASSERT(context == nullptr, "Application layer is already initialized.");
+
+    // NOTE: Консольный вывод является необязательным, если приложение запускается только в оконном режиме,
+    //       в случае запуска программы с использованием консоли она МОЖЕТ работать.
+    platform_console_initialize();
+
+    if(!config)
+    {
+        LOG_ERROR("%s requires a valid configuration pointer. Aborted.", __func__);
+        application_terminate();
+        return false;
+    }
+
+    if(!config->initialize || !config->shutdown || !config->on_resize || !config->update || !config->render)
+    {
+        LOG_ERROR("%s requires valid callback pointers in configuration. Aborted.", __func__);
+        application_terminate();
+        return false;
+    }
+
+    if(!platform_memory_initialize())
+    {
+        LOG_ERROR("Failed to initialize platform memory subsystem. Unable to continue.");
+        application_terminate();
+        return false;
+    }
+    LOG_INFO("Memory subsystem initialized successfully.");
+
+    if(!platform_systimer_initialize())
+    {
+        LOG_ERROR("Failed to initialize platform timer subsystem. Unable to continue.");
+        application_terminate();
+        return false;
+    }
+    LOG_INFO("Timer subsystem initialized successfully.");
+
+    if(!platform_thread_initialize())
+    {
+        LOG_ERROR("Failed to initialize platform thread subsystem. Unable to continue.");
+        application_terminate();
+        return false;
+    }
+    LOG_INFO("Thread subsystem initialized successfully.");
+
+    if(!memory_system_initialize())
+    {
+        LOG_ERROR("Failed to initialize memory system. Unable to continue.");
+        application_terminate();
+        return false;
+    }
+    LOG_INFO("Memory system initialized successfully.");
+
+    if(!input_system_initialize())
+    {
+        LOG_ERROR("Failed to initialize input system. Unable to continue.");
+        application_terminate();
+        return false;
+    }
+    LOG_INFO("Input system initialized successfully.");
+
+    if(!platform_window_initialize(config->window.backend_type))
+    {
+        LOG_ERROR("Failed to initialize window subsystem. Unable to continue.");
+        application_terminate();
+        return false;
+    }
+    LOG_INFO("Window subsystem initialized successfully.");
+
+    context = mallocate(sizeof(application_context), MEMORY_TAG_APPLICATION);
+    if(!context)
+    {
+        LOG_ERROR("Failed to allocate memory for application context.");
+        application_terminate();
+        return false;
+    }
+    mzero(context, sizeof(application_context));
+
+    // Получение callback функций.
+    context->shutdown = config->shutdown;
+    context->on_resize = config->on_resize;
+    context->update = config->update;
+    context->render = config->render;
+
+    // Создание окна.
+    platform_window_config wincfg = {
+        .title = config->window.title,
+        .width = config->window.width,
+        .height = config->window.height,
+        .on_close = application_on_close,
+        .on_resize = application_on_resize,
+        .on_focus = application_on_focus,
+        .on_key = application_on_key,
+        .on_mouse_button = application_on_mouse_button,
+        .on_mouse_move = application_on_mouse_move,
+        .on_mouse_wheel = application_on_mouse_wheel
+    };
+
+    context->window = platform_window_create(&wincfg);
+    if(!context->window)
+    {
+        LOG_ERROR("Failed to create application window.");
+        application_terminate();
+        return false;
+    }
+    LOG_INFO("Window has been created successfully.");
+
+    // Установка количества кадров по умолчанию.
+    if(config->performance.target_fps)
+    {
+        context->target_frame_time = 1.0 / (f64)config->performance.target_fps;
+    }
+    else
+    {
+        context->target_frame_time = 1.0 / 1000.0;
+    }
+
+    if(!config->initialize(config))
+    {
+        LOG_ERROR("Failed to initialize user application.");
+        return false;
+    }
+    LOG_INFO("User application initialized successfully.");
+
+    // Обновление размеров окна.
+    config->on_resize(config->window.width, config->window.height);
+
+    // Инициализация состояний.
+    context->is_running = true;
+    context->is_suspended = false;
+
+    return true;
+}
+
+bool application_run()
+{
+    ASSERT(context != nullptr, "Application should be initialized before running.");
+
+    // Тайминги управления кадром.
+    timer frame_timer, game_timer;
+    timer_init(&frame_timer);
+    timer_init(&game_timer);
+
+    // Запуск таймеров.
+    timer_start(&frame_timer);
+    timer_start(&game_timer);
+
+    application_frame_stats frame_stats = {0};
+    f64 frame_time_accumulator = 0.0;
+    u64 frame_count = 0;
+
+    while(context->is_running)
+    {
+        timer_restart(&frame_timer);
+
+        // Пересчет и обновление статистики предыдущего кадра.
+        frame_stats.render_time -= frame_stats.update_time;
+        frame_stats.update_time -= frame_stats.window_time;
+        context->frame_stats = frame_stats;
+
+        // Обновление состояния ввода.
+        input_system_update();
+
+        if(!platform_window_poll_events())
+        {
+            LOG_ERROR("Failed to process window events.");
+            application_terminate();
+            return false;
+        }
+
+        // Время от начала кадра: обработки пользовательского ввода, и др. событий окна.
+        frame_stats.window_time = timer_elapsed(&frame_timer);
+
+        // Обновление игрового времени (всегда).
+        // TODO: Ограничение!
+        f32 delta_time = (f32)timer_elapsed(&game_timer);
+        timer_restart(&game_timer);
+
+        // Сбор статистики FPS.
+        frame_count++;
+        frame_time_accumulator += delta_time;
+
+        // Обновление статистики FPS.
+        if(frame_time_accumulator >= 1.0)
+        {
+            frame_stats.fps = frame_count;
+            frame_time_accumulator -= 1.0;
+            frame_count = 0;
+        }
+
+        if(!context->is_suspended)
+        {
+            if(!context->update(delta_time))
+            {
+                LOG_ERROR("Update of user application failed. Shutting down.");
+                application_terminate();
+                return false;
+            }
+
+            // Время от начала кадра: обработки обновления логики приложения.
+            frame_stats.update_time = timer_elapsed(&frame_timer);
+
+            if(!context->render(delta_time))
+            {
+                LOG_ERROR("Render of user application failed. Shutting down.");
+                application_terminate();
+                return false;
+            }
+
+            // Время от начала кадра: отрисовка буфера.
+            frame_stats.render_time = timer_elapsed(&frame_timer);
+        }
+
+        // Время от начала кадра и расчет времени сна с поправкой на ошибку.
+        frame_stats.frame_time = timer_elapsed(&frame_timer);
+        frame_stats.sleep_time = context->target_frame_time - frame_stats.frame_time - frame_stats.sleep_error_time;
+        frame_stats.sleep_error_time = 0.0;
+
+        if(frame_stats.sleep_time >= 0.001)
+        {
+            // Возвращение управления операционной система, время сна.
+            platform_thread_sleep((u32)(frame_stats.sleep_time * 1000.0));
+
+            // Вычисление ошибки c ограничением в разумных пределах.
+            frame_stats.sleep_actual_time = timer_elapsed(&frame_timer) - frame_stats.frame_time;
+            frame_stats.sleep_error_time = frame_stats.sleep_actual_time - frame_stats.sleep_time;
+            frame_stats.sleep_error_time = CLAMP(
+                frame_stats.sleep_error_time, -context->target_frame_time * 0.5, context->target_frame_time * 0.5
+            );
+        }
+    }
+
+    application_terminate();
+    return true;
+}
+
+void application_quit()
+{
+    if(context)
+    {
+        context->is_running = false;
+    }
+}
+
+void application_terminate()
+{
+    if(context)
+    {
+        // Вызов завершения пользовательского приложения.
+        if(context->shutdown)
+        {
+            context->shutdown();
+            context->shutdown = nullptr;
+            LOG_INFO("User application shutdown complete.");
+        }
+
+        // Уничтожение окна приложения.
+        if(context->window)
+        {
+            platform_window_destroy(context->window);
+            context->window = nullptr;
+            LOG_INFO("Window destroy complete.");
+        }
+
+        // Освобождение контекста.
+        mfree(context, sizeof(application_context), MEMORY_TAG_APPLICATION);
+        context = nullptr;
+    }
+
+    // Завершение подсистемы окон.
+    if(platform_window_is_initialized())
+    {
+        platform_window_shutdown();
+        LOG_INFO("Window subsystem shutdown complete.");
+    }
+
+    // Завершение системы ввода.
+    if(input_system_is_initialized())
+    {
+        input_system_shutdown();
+        LOG_INFO("Input system shutdown complete.");
+    }
+
+    // Завершение системы памяти.
+    if(memory_system_is_initialized())
+    {
+        memory_system_shutdown();
+        LOG_INFO("Memory system shutdown complete.");
+    }
+
+    // Завершение подсистемы потоков.
+    if(platform_thread_is_initialized())
+    {
+        platform_thread_shutdown();
+        LOG_INFO("Thread subsystem shutdown complete.");
+    }
+
+    // Завершение подсистемы таймера.
+    if(platform_systimer_is_initialized())
+    {
+        platform_systimer_shutdown();
+        LOG_INFO("Timer subsystem shutdown complete.");
+    }
+
+    // Завершение подсистемы памяти.
+    if(platform_memory_is_initialized())
+    {
+        platform_memory_shutdown();
+        LOG_INFO("Memory subsystem shutdown complete.");
+    }
+
+    // Завершение подсистемы консоли.
+    if(platform_console_is_initialized())
+    {
+        platform_console_shutdown();
+    }
+}
+
+application_frame_stats application_get_frame_stats()
+{
+    if(context)
+    {
+        return context->frame_stats;
+    }
+
+    return (application_frame_stats){0};
 }

@@ -2,8 +2,8 @@
 
 #ifdef PLATFORM_WINDOWS_FLAG
 
-    #include "core/logger.h"
     #include "debug/assert.h"
+    #include "core/logger.h"
     #include <Windows.h>
 
     static u32 timer_resolution = 0;
@@ -11,10 +11,7 @@
 
     bool platform_thread_initialize()
     {
-        if(initialized)
-        {
-            return true;
-        }
+        ASSERT(initialized == false, "Thread subsystem is already initialized.");
 
         // NOTE: Если вдруг завершиться неудачей, просто будет ограничение по кадрам.
         TIMECAPS tc;
@@ -62,7 +59,7 @@
 
     bool platform_thread_sleep(u32 time_ms)
     {
-        ASSERT(initialized == true, "Platform subsystem thread not initialized. Call platform_thread_initialize() first.");
+        ASSERT(initialized == true, "Thread subsystem not initialized. Call platform_thread_initialize() first.");
         ASSERT(time_ms > 0, "Sleep time must be greater than 0.");
 
         Sleep(time_ms);

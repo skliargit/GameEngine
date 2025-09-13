@@ -35,7 +35,7 @@ bool input_system_initialize()
     context = mallocate(sizeof(input_system_context), MEMORY_TAG_SYSTEM);
     if(!context)
     {
-        LOG_FATAL("Failed to allocate memory for context.");
+        LOG_ERROR("Failed to allocate memory for input context.");
         return false;
     }
     mzero(context, sizeof(input_system_context));

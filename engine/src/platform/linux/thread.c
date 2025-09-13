@@ -3,17 +3,14 @@
 #ifdef PLATFORM_LINUX_FLAG
 
     #include "debug/assert.h"
-    #include <time.h>
     #include <errno.h>
+    #include <time.h>
 
     static bool initialized = false;
 
     bool platform_thread_initialize()
     {
-        if(initialized)
-        {
-            return true;
-        }
+        ASSERT(initialized == false, "Thread subsystem is already initialized.");
 
         initialized = true;
         return true;
@@ -31,7 +28,7 @@
 
     bool platform_thread_sleep(u32 time_ms)
     {
-        ASSERT(initialized == true, "Platform subsystem thread not initialized. Call platform_thread_initialize() first.");
+        ASSERT(initialized == true, "Thread subsystem not initialized. Call platform_thread_initialize() first.");
         ASSERT(time_ms > 0, "Sleep time must be greater than 0.");
 
         struct timespec req;

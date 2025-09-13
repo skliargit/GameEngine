@@ -55,6 +55,7 @@ typedef struct memory_format {
 
 /*
     @brief Инициализирует систему менеджмента и контроля памяти.
+    @note Должна быть вызвана один раз при старте приложения.
     @return true - инициализация завершилась успешно, false - произошла ошибка.
 */
 bool memory_system_initialize();

@@ -1,6 +1,7 @@
 #include "core/memory.h"
 #include "core/logger.h"
 #include "core/string.h"
+#include "core/timer.h"
 #include "debug/assert.h"
 #include "platform/memory.h"
 
@@ -29,7 +30,9 @@ bool memory_system_initialize()
     context = platform_memory_allocate(sizeof(memory_system_context));
     if(!context)
     {
-        LOG_FATAL("Failed to allocate memory for context.");
+        timer_format requested;
+        timer_get_format(sizeof(memory_system_context), &requested);
+        LOG_ERROR("Memory subsystem did not allocate the requested %.2f%s of memory.", requested.amount, requested.unit);
         return false;
     }
     platform_memory_zero(context, sizeof(memory_system_context));
@@ -41,7 +44,7 @@ void memory_system_shutdown()
 {
     ASSERT(context != nullptr, "Memory system not initialized. Call memory_system_initialize() first.");
 
-    if(context->stats.total_allocated)
+    if(context->stats.total_allocated && context->stats.allocation_count)
     {
         LOG_WARN("Detecting memory leaks...");
         const char* meminfo = memory_system_usage_str();
@@ -136,6 +139,9 @@ void* memory_allocate(u64 size, u16 alignment, memory_tag tag)
     void* block = platform_memory_allocate(size);
     if(!block)
     {
+        timer_format requested;
+        timer_get_format(size, &requested);
+        LOG_ERROR("Memory system did not allocate the requested %.2f%s of memory.", requested.amount, requested.unit);
         LOG_FATAL("Failed to allocate memory. Stopping for debugging.");
         return nullptr;
     }

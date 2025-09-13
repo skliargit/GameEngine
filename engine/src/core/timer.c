@@ -56,6 +56,8 @@ bool timer_is_running(const timer* t)
 
 void timer_get_format(f64 time_sec, timer_format* out_format)
 {
+    ASSERT(out_format != nullptr, "Pointer must be non-zero.");
+
     f64 abs_time = fabs(time_sec);
 
     if(abs_time < 1e-6)

@@ -18,15 +18,11 @@
         [CONSOLE_COLOR_GRAY]    = "0;38;5;244",
     };
 
-    static const char* format_str = "\033[%sm%s\033[0m";
     static bool initialized = false;
 
     bool platform_console_initialize()
     {
-        if(initialized)
-        {
-            return true;
-        }
+        ASSERT(initialized == false, "Console subsystem is already initialized.");
 
         initialized = true;
         return true;
@@ -53,7 +49,7 @@
         ASSERT(color < CONSOLE_COLOR_COUNT, "Must be less than CONSOLE_COLOR_COUNT");
         ASSERT(message != nullptr, "Message pointer must be non-null.");
 
-        fprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), format_str, colors[color], message);
+        fprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), "\033[%sm%s\033[0m", colors[color], message);
     }
 
 #endif

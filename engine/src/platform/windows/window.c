@@ -62,12 +62,12 @@
 
     bool platform_window_initialize(platform_window_backend_type type)
     {
-        ASSERT(client == nullptr, "Platform window is already initialized.");
+        ASSERT(client == nullptr, "Window subsystem is already initialized.");
         ASSERT(type < PLATFORM_WINDOW_BACKEND_TYPE_COUNT, "Must be less than PLATFORM_WINDOW_BACKEND_TYPE_COUNT.");
 
         if(type != PLATFORM_WINDOW_BACKEND_TYPE_AUTO && type != PLATFORM_WINDOW_BACKEND_TYPE_WIN32)
         {
-            LOG_FATAL("Unsupported window backend type selected for Windows: %d.", type);
+            LOG_ERROR("Unsupported window backend type selected for Windows: %d.", type);
             return false;
         }
         type = PLATFORM_WINDOW_BACKEND_TYPE_WIN32;
@@ -99,13 +99,12 @@
             return false;
         }
 
-        LOG_TRACE("Platform window initialized successfully with backend type: %d.", type);
         return true;
     }
 
     void platform_window_shutdown()
     {
-        ASSERT(client != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
 
         // Уничтожение всех окон (пока только одно окно).
         if(client->window)
@@ -123,8 +122,6 @@
 
         mfree(client, client->memory_requirement, MEMORY_TAG_APPLICATION);
         client = nullptr;
-
-        LOG_TRACE("Platform window shutdown completed.");
     }
 
     bool platform_window_is_initialized()
@@ -134,10 +131,10 @@
 
     bool platform_window_poll_events()
     {
-        ASSERT(client != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
 
         MSG msg = {};
-        while(PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE))
+        while(PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) > 0)
         {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
@@ -148,7 +145,7 @@
 
     platform_window* platform_window_create(const platform_window_config* config)
     {
-        ASSERT(client != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
         ASSERT(config != nullptr, "Config pointer must be non-null.");
 
         LOG_TRACE("Creating window '%s' (size: %dx%d)...", config->title, config->width, config->height);
@@ -194,13 +191,12 @@
         UpdateWindow(client->window->hwnd);
 
         LOG_TRACE("Window '%s' created successfully.", client->window->title);
-
         return client->window;
     }
 
     void platform_window_destroy(platform_window* window)
     {
-        ASSERT(client != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
         ASSERT(window != nullptr, "Window pointer must be non-null.");
 
         LOG_TRACE("Destroying window '%s'...", window->title);
@@ -296,15 +292,15 @@
     {
         switch(code)
         {
-        case WM_LBUTTONDOWN:
-        case WM_LBUTTONUP:
-             return BTN_LEFT;
-        case WM_MBUTTONDOWN:
-        case WM_MBUTTONUP:
-            return BTN_MIDDLE;
-        case WM_RBUTTONDOWN:
-        case WM_RBUTTONUP:
-            return BTN_RIGHT;
+            case WM_LBUTTONDOWN:
+            case WM_LBUTTONUP:
+                 return BTN_LEFT;
+            case WM_MBUTTONDOWN:
+            case WM_MBUTTONUP:
+                return BTN_MIDDLE;
+            case WM_RBUTTONDOWN:
+            case WM_RBUTTONUP:
+                return BTN_RIGHT;
         }
 
         return BTN_UNKNOWN;

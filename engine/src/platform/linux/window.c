@@ -27,7 +27,7 @@
 
     bool platform_window_initialize(platform_window_backend_type type)
     {
-        ASSERT(context == nullptr, "Platform window is already initialized.");
+        ASSERT(context == nullptr, "Window subsystem is already initialized.");
         ASSERT(type < PLATFORM_WINDOW_BACKEND_TYPE_COUNT, "Must be less than PLATFORM_WINDOW_BACKEND_TYPE_COUNT.");
 
         // Кеширование ответов.
@@ -85,7 +85,7 @@
         }
         else
         {
-            LOG_FATAL("Unsupported window backend type selected for Linux: %d.", type);
+            LOG_ERROR("Unsupported window backend type selected for Linux: %d.", type);
             return false;
         }
 
@@ -117,11 +117,7 @@
 
         if(!result)
         {
-            LOG_ERROR("Failed to initialize platform window with backend type: %d.", type);
-        }
-        else
-        {
-            LOG_TRACE("Platform window initialized successfully with backend type: %d.", type);
+            LOG_ERROR("Failed to initialize window backend (type: %d).", type);
         }
 
         return result;
@@ -129,13 +125,11 @@
 
     void platform_window_shutdown()
     {
-        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(context != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
 
         context->shutdown(context->internal_data);
         mfree(context, context->memory_requirement, MEMORY_TAG_APPLICATION);
         context = nullptr;
-
-        LOG_TRACE("Platform window shutdown completed.");
     }
 
     bool platform_window_is_initialized()
@@ -145,22 +139,22 @@
 
     bool platform_window_poll_events()
     {
-        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(context != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
 
         return context->poll_events(context->internal_data);
     }
 
     platform_window* platform_window_create(const platform_window_config* config)
     {
-        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(context != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
         ASSERT(config != nullptr, "Config pointer must be non-null.");
 
-        return context->window_create(config, context->internal_data);;
+        return context->window_create(config, context->internal_data);
     }
 
     void platform_window_destroy(platform_window* window)
     {
-        ASSERT(context != nullptr, "Platform window not initialized. Call platform_window_initialize() first.");
+        ASSERT(context != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
         ASSERT(window != nullptr, "Window pointer must be non-null.");
 
         context->window_destroy(window, context->internal_data);
