@@ -5,7 +5,7 @@
 2. [Сборка на Arch Linux](#archlinux)
 3. [Сборка на Windows](#windows)
 
-## <a name="archlinux"></a>Скачивание проекта
+## <a name="download"></a>Скачивание проекта
 Выберите директорию, в которую необходимо сохранить проект, и перейдите в неё. Затем выполните:
 ```sh
 git clone https://github.com/skliargit/GameEngine.git GameEngine

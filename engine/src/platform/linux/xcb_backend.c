@@ -171,7 +171,7 @@
             XKB_X11_SETUP_XKB_EXTENSION_NO_FLAGS, nullptr, nullptr, nullptr, nullptr
         ))
         {
-            LOG_ERROR("Failed to setup XKB extention.");
+            LOG_ERROR("Failed to setup XKB extension.");
             xcb_backend_shutdown(client);
             return false;
         }
@@ -705,17 +705,17 @@
         LOG_TRACE("Window destroy complete.");
     }
 
-    void xcb_backend_enumerate_vulkan_extentions(u32* extention_count, const char** out_extentions)
+    void xcb_backend_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
     {
-        static const char* extentions[] = {VK_KHR_XCB_SURFACE_EXTENSION_NAME};
+        static const char* extensions[] = {VK_KHR_XCB_SURFACE_EXTENSION_NAME};
 
-        if(out_extentions == nullptr)
+        if(out_extensions == nullptr)
         {
-            *extention_count = sizeof(extentions) / sizeof(char*);
+            *extension_count = sizeof(extensions) / sizeof(char*);
             return;
         }
 
-        mcopy(out_extentions, extentions, sizeof(extentions));
+        mcopy(out_extensions, extensions, sizeof(extensions));
     }
 
     u32 xcb_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)

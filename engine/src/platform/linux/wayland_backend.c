@@ -997,17 +997,17 @@
         return buffer;
     }
 
-    void wayland_backend_enumerate_vulkan_extentions(u32* extention_count, const char** out_extentions)
+    void wayland_backend_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
     {
-        static const char* extentions[] = {VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME};
+        static const char* extensions[] = {VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME};
 
-        if(out_extentions == nullptr)
+        if(out_extensions == nullptr)
         {
-            *extention_count = sizeof(extentions) / sizeof(char*);
+            *extension_count = sizeof(extensions) / sizeof(char*);
             return;
         }
 
-        mcopy(out_extentions, extentions, sizeof(extentions));
+        mcopy(out_extensions, extensions, sizeof(extensions));
     }
 
     u32 wayland_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)

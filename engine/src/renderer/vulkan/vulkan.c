@@ -52,7 +52,7 @@ bool vulkan_backend_initialize(const char* title, u32 width, u32 height)
     // darray_push(required_layers, &"VK_LAYER_LUNARG_api_dump");    // Выводит на консоль вызовы и передаваемые параметры.
     // darray_push(required_layers, &"VK_LAYER_RENDERDOC_Capture");  // Захват кадров для отладки в RenderDoc.
 
-    LOG_DEBUG("Vulkan instance used layers:");
+    LOG_DEBUG("Vulkan instance required layers:");
     required_layer_count = darray_length(required_layers);
     for(u32 i = 0; i < required_layer_count; ++i)
     {
@@ -81,52 +81,52 @@ bool vulkan_backend_initialize(const char* title, u32 width, u32 height)
 #endif
 
     // Получение списка расширений для экземпляра Vulkan.
-    u32 required_extention_count = 0;
-    const char** required_extentions = nullptr;
+    u32 required_extension_count = 0;
+    const char** required_extensions = nullptr;
 
     // Запрос доступных расширений.
-    u32 available_extention_count;
-    vkEnumerateInstanceExtensionProperties(nullptr, &available_extention_count, nullptr);
-    VkExtensionProperties* available_extentions = darray_create_custom(VkExtensionProperties, available_extention_count);
-    vkEnumerateInstanceExtensionProperties(nullptr, &available_extention_count, available_extentions);
+    u32 available_extension_count;
+    vkEnumerateInstanceExtensionProperties(nullptr, &available_extension_count, nullptr);
+    VkExtensionProperties* available_extensions = darray_create_custom(VkExtensionProperties, available_extension_count);
+    vkEnumerateInstanceExtensionProperties(nullptr, &available_extension_count, available_extensions);
 
     // Платформо-зависимые и другие требуемые расширения.
-    platform_window_enumerate_vulkan_extentions(&required_extention_count, nullptr);
-    required_extentions = darray_create_custom(const char*, required_extention_count);
-    platform_window_enumerate_vulkan_extentions(&required_extention_count, required_extentions);
-    darray_set_length(required_extentions, required_extention_count);
-    darray_push(required_extentions, &VK_KHR_SURFACE_EXTENSION_NAME);     // Расширение для использования поверхности windowы.
+    platform_window_enumerate_vulkan_extensions(&required_extension_count, nullptr);
+    required_extensions = darray_create_custom(const char*, required_extension_count);
+    platform_window_enumerate_vulkan_extensions(&required_extension_count, required_extensions);
+    darray_set_length(required_extensions, required_extension_count);
+    darray_push(required_extensions, &VK_KHR_SURFACE_EXTENSION_NAME);     // Расширение для использования поверхности windowы.
 
 #ifdef DEBUG_FLAG
-    darray_push(required_extentions, &VK_EXT_DEBUG_UTILS_EXTENSION_NAME); // Расширение для отладки.
+    darray_push(required_extensions, &VK_EXT_DEBUG_UTILS_EXTENSION_NAME); // Расширение для отладки.
 #endif
 
-    LOG_DEBUG("Vulkan instance used extentions:");
-    required_extention_count = darray_length(required_extentions);
-    for(u32 i = 0; i < required_extention_count; ++i)
+    LOG_DEBUG("Vulkan instance required extensions:");
+    required_extension_count = darray_length(required_extensions);
+    for(u32 i = 0; i < required_extension_count; ++i)
     {
         bool found = false;
-        for(u32 j = 0; j < available_extention_count; ++j)
+        for(u32 j = 0; j < available_extension_count; ++j)
         {
-            if(string_equal(required_extentions[i], available_extentions[j].extensionName))
+            if(string_equal(required_extensions[i], available_extensions[j].extensionName))
             {
                 found = true;
                 break;
             }
         }
 
-        LOG_DEBUG("[%s] %s", found ? "+" : "-", required_extentions[i]);
+        LOG_DEBUG("[%s] %s", found ? "+" : "-", required_extensions[i]);
         if(!found)
         {
-            darray_remove(required_extentions, i, nullptr);
+            darray_remove(required_extensions, i, nullptr);
         }
     }
 
     // Удаление временного массива доступных расширений.
-    darray_destroy(available_extentions);
+    darray_destroy(available_extensions);
 
     // Обновление количества требуемых расширений.
-    required_extention_count = darray_length(required_extentions);
+    required_extension_count = darray_length(required_extensions);
 
     // Создание экземпляра Vulkan.
     VkApplicationInfo application_info = {
@@ -141,8 +141,8 @@ bool vulkan_backend_initialize(const char* title, u32 width, u32 height)
     VkInstanceCreateInfo instance_info = {
         .sType                   = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo        = &application_info,
-        .enabledExtensionCount   = required_extention_count,
-        .ppEnabledExtensionNames = required_extentions,
+        .enabledExtensionCount   = required_extension_count,
+        .ppEnabledExtensionNames = required_extensions,
         .enabledLayerCount       = required_layer_count,
         .ppEnabledLayerNames     = required_layers
     };
@@ -161,9 +161,9 @@ bool vulkan_backend_initialize(const char* title, u32 width, u32 height)
         darray_destroy(required_layers);
     }
 
-    if(required_extentions)
+    if(required_extensions)
     {
-        darray_destroy(required_extentions);
+        darray_destroy(required_extensions);
     }
 
     // TODO: Перехват консоли vulkan.

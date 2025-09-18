@@ -84,14 +84,14 @@ void xcb_backend_window_destroy(platform_window* window, void* internal_data);
 
 /*
     @brief Перечисляет расширения Vulkan, необходимые для создания поверхности окна на текущей платформе.
-    @note Для получения расширения используется двухэтапный подход: первый вызов (out_extentions = nullptr)
+    @note Для получения расширения используется двухэтапный подход: первый вызов (out_extensions = nullptr)
           возвращает количество расширений, второй вызов сохраняет имена расширений в предоставленный буфер.
-    @param extention_count Указатель на переменную для сохранения количества расширений доступных при
-           (out_extentions = nullptr), или размер буфера out_extentions для записи расширений.
-    @param out_extentions Указатель на массив строк, который будет заполнен именами расширений, или
-           nullptr для получения количество расширений через extention_count.
+    @param extension_count Указатель на переменную для сохранения количества расширений доступных при
+           (out_extensions = nullptr), или размер буфера out_extensions для записи расширений.
+    @param out_extensions Указатель на массив строк, который будет заполнен именами расширений, или
+           nullptr для получения количество расширений через extension_count.
 */
-void xcb_backend_enumerate_vulkan_extentions(u32* extention_count, const char** out_extentions);
+void xcb_backend_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions);
 
 /*
     @brief Создает поверхность Vulkan для указанного окна.

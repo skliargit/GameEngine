@@ -127,7 +127,7 @@ void log_default_handler(const log_message message, const void* user_data)
     };
 
     // Формат сообщения по умолчанию.
-    static const char* format_message = "%hu-%02hhu-%02hhu %02hhu:%02hhu:%02hhu %s (%s:%u): %s\n";
+    static const char* format_message = "%hu-%02hhu-%02hhu %02hhu:%02hhu:%02hhu %s (%s:%-3u): %s\n";
 
     // Кешированная дата.
     static platform_datetime dt;

@@ -20,7 +20,7 @@
         // Функция завершающая работу оконной системы.
         void (*shutdown)(void* internal_data);
         // Функция получения расширений Vulkan.
-        void (*enumerate_vulkan_extentions)(u32* extention_count, const char** out_extentions);
+        void (*enumerate_vulkan_extensions)(u32* extension_count, const char** out_extensions);
         // Функция создания поверхности Vulkan.
         u32 (*create_vulkan_surface)(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface);
         // Функция уничтожения поверхности Vulkan.
@@ -114,7 +114,7 @@
             context->window_destroy = wayland_backend_window_destroy;
             context->poll_events = wayland_backend_poll_events;
             context->shutdown = wayland_backend_shutdown;
-            context->enumerate_vulkan_extentions = wayland_backend_enumerate_vulkan_extentions;
+            context->enumerate_vulkan_extensions = wayland_backend_enumerate_vulkan_extensions;
             context->create_vulkan_surface = wayland_backend_create_vulkan_surface;
             context->destroy_vulkan_surface = wayland_backend_destroy_vulkan_surface;
             context->supports_vulkan_presentation = wayland_backend_supports_vulkan_presentation;
@@ -126,7 +126,7 @@
             context->window_destroy = xcb_backend_window_destroy;
             context->poll_events = xcb_backend_poll_events;
             context->shutdown = xcb_backend_shutdown;
-            context->enumerate_vulkan_extentions = xcb_backend_enumerate_vulkan_extentions;
+            context->enumerate_vulkan_extensions = xcb_backend_enumerate_vulkan_extensions;
             context->create_vulkan_surface = xcb_backend_create_vulkan_surface;
             context->destroy_vulkan_surface = xcb_backend_destroy_vulkan_surface;
             context->supports_vulkan_presentation = xcb_backend_supports_vulkan_presentation;
@@ -178,12 +178,12 @@
         context->window_destroy(window, context->internal_data);
     }
 
-    void platform_window_enumerate_vulkan_extentions(u32* extention_count, const char** out_extentions)
+    void platform_window_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
     {
         ASSERT(context != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
-        ASSERT(extention_count != nullptr, "Pointer 'extention_count' must be non-null.");
+        ASSERT(extension_count != nullptr, "Pointer 'extension_count' must be non-null.");
 
-        context->enumerate_vulkan_extentions(extention_count, out_extentions);
+        context->enumerate_vulkan_extensions(extension_count, out_extensions);
     }
 
     u32 platform_window_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
