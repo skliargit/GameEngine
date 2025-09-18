@@ -4,6 +4,7 @@
 #include "core/timer.h"
 #include "core/memory.h"
 #include "core/input.h"
+#include "core/event.h"
 
 #include "debug/assert.h"
 #include "platform/console.h"
@@ -11,6 +12,7 @@
 #include "platform/systimer.h"
 #include "platform/thread.h"
 #include "platform/window.h"
+#include "renderer/renderer.h"
 
 typedef struct application_context {
     // Указатель на контекст окна приложения.
@@ -38,82 +40,54 @@ static application_context* context = nullptr;
 
 void application_on_close()
 {
-    LOG_TRACE("Window close requested, stopping loop.");
-    context->is_running = false;
+    application_quit();
 }
 
 void application_on_resize(const u32 width, const u32 height)
 {
-    LOG_TRACE("Resize event to %dx%d.", width, height);
+    renderer_on_resize(width, height);
     context->on_resize(width, height);
+
+    event_context data = {.u32[0] = width, .u32[1] = height};
+    event_send(EVENT_CODE_APPLICATION_RESIZE, nullptr, &data);
 }
 
 void application_on_focus(const bool focus_state)
 {
-    if(focus_state)
-    {
-        LOG_TRACE("Window focused event.");
-    }
-    else
-    {
-        LOG_TRACE("Window lost focus event.");
-    }
+    event_context data = {.u32[0] = focus_state};
+    event_send(EVENT_CODE_APPLICATION_FOCUS, nullptr, &data);
 }
 
 void application_on_key(const keyboard_key key, const bool press_state)
 {
-    if(press_state)
-    {
-        LOG_TRACE("Key '%s' press event.", input_key_to_str(key));
-    }
-    else
-    {
-        LOG_TRACE("Key '%s' release event.", input_key_to_str(key));
-    }
-
     input_keyboard_key_update(key, press_state);
+
+    event_context data = {.u32[0] = key, .u32[1] = 0, .u32[2] = press_state};
+    event_send(EVENT_CODE_KEYBOARD_KEY, nullptr, &data);
 }
 
 void application_on_mouse_button(const mouse_button btn, const bool press_state)
 {
-    if(press_state)
-    {
-        LOG_TRACE("Mouse button '%s' press event.", input_mouse_button_to_str(btn));
-    }
-    else
-    {
-        LOG_TRACE("Mouse button '%s' release event.", input_mouse_button_to_str(btn));
-    }
     input_mouse_button_update(btn, press_state);
+
+    event_context data = { .u32[0] = btn, .u32[1] = press_state};
+    event_send(EVENT_CODE_MOUSE_BUTTON, nullptr, &data);
 }
 
 void application_on_mouse_move(const i32 x, const i32 y)
 {
-    // LOG_TRACE("Mouse move to %dx%d event.", x, y);
     input_mouse_position_update(x, y);
+
+    event_context data = {.i32[0] = x, .i32[1] = y};
+    event_send(EVENT_CODE_MOUSE_MOVE, nullptr, &data);
 }
 
 void application_on_mouse_wheel(const i32 vertical_delta, const i32 horizontal_delta)
 {
-    if(vertical_delta > 0)
-    {
-        LOG_TRACE("Mouse vertical scroll forward event.");
-    }
-    else if(vertical_delta < 0)
-    {
-        LOG_TRACE("Mouse vertical scroll backward event.");
-    }
-
-    if(horizontal_delta > 0)
-    {
-        LOG_TRACE("Mouse horizontal scroll forward event.");
-    }
-    else if(horizontal_delta < 0)
-    {
-        LOG_TRACE("Mouse horizontal scroll backward event.");
-    }
-
     input_mouse_wheel_update(vertical_delta, horizontal_delta);
+
+    event_context data = {.i32[0] = vertical_delta, .i32[1] = horizontal_delta};
+    event_send(EVENT_CODE_MOUSE_WHEEL, nullptr, &data);
 }
 
 bool application_initialize(const application_config* config)
@@ -179,6 +153,13 @@ bool application_initialize(const application_config* config)
     }
     LOG_INFO("Input system initialized successfully.");
 
+    if(!event_system_initialize())
+    {
+        LOG_ERROR("Failed to initialize event system. Unable to continue.");
+        return false;
+    }
+    LOG_INFO("Event system initialized successfully.");
+
     if(!platform_window_initialize(config->window.backend_type))
     {
         LOG_ERROR("Failed to initialize window subsystem. Unable to continue.");
@@ -202,8 +183,18 @@ bool application_initialize(const application_config* config)
     context->update = config->update;
     context->render = config->render;
 
+    // Установка количества кадров по умолчанию.
+    if(config->performance.target_fps)
+    {
+        context->target_frame_time = 1.0 / (f64)config->performance.target_fps;
+    }
+    else
+    {
+        context->target_frame_time = 1.0 / 1000.0;
+    }
+
     // Создание окна.
-    platform_window_config wincfg = {
+    platform_window_config windowcfg = {
         .title = config->window.title,
         .width = config->window.width,
         .height = config->window.height,
@@ -216,7 +207,7 @@ bool application_initialize(const application_config* config)
         .on_mouse_wheel = application_on_mouse_wheel
     };
 
-    context->window = platform_window_create(&wincfg);
+    context->window = platform_window_create(&windowcfg);
     if(!context->window)
     {
         LOG_ERROR("Failed to create application window.");
@@ -225,29 +216,32 @@ bool application_initialize(const application_config* config)
     }
     LOG_INFO("Window has been created successfully.");
 
-    // Установка количества кадров по умолчанию.
-    if(config->performance.target_fps)
+    // Инициализация рендерера.
+    renderer_config rendercfg = {
+        .backend_type = RENDERER_BACKEND_TYPE_VULKAN,
+        .title = config->window.title,
+        .width = config->window.width,
+        .height = config->window.height
+    };
+
+    if(!renderer_initialize(&rendercfg))
     {
-        context->target_frame_time = 1.0 / (f64)config->performance.target_fps;
+        LOG_ERROR("Failed to initialize renderer. Unable to continue.");
+        application_terminate();
+        return false;
     }
-    else
-    {
-        context->target_frame_time = 1.0 / 1000.0;
-    }
+    LOG_INFO("Renderer initialized successfully.");
 
     if(!config->initialize(config))
     {
         LOG_ERROR("Failed to initialize user application.");
+        application_terminate();
         return false;
     }
     LOG_INFO("User application initialized successfully.");
 
-    // Обновление размеров окна.
-    config->on_resize(config->window.width, config->window.height);
-
-    // Инициализация состояний.
-    context->is_running = true;
-    context->is_suspended = false;
+    // Обновление размеров приложения.
+    // application_on_resize(config->window.width, config->window.height);
 
     return true;
 }
@@ -255,6 +249,10 @@ bool application_initialize(const application_config* config)
 bool application_run()
 {
     ASSERT(context != nullptr, "Application should be initialized before running.");
+
+    // Инициализация состояний.
+    context->is_running = true;
+    context->is_suspended = false;
 
     // Тайминги управления кадром.
     timer frame_timer, game_timer;
@@ -359,6 +357,7 @@ void application_quit()
     if(context)
     {
         context->is_running = false;
+        event_send(EVENT_CODE_APPLICATION_QUIT, nullptr, nullptr);
     }
 }
 
@@ -372,6 +371,13 @@ void application_terminate()
             context->shutdown();
             context->shutdown = nullptr;
             LOG_INFO("User application shutdown complete.");
+        }
+
+        // Завершение системы рендерера.
+        if(renderer_system_is_initialized())
+        {
+            renderer_shutdown();
+            LOG_INFO("Renderer shutdown complete.");
         }
 
         // Уничтожение окна приложения.
@@ -392,6 +398,13 @@ void application_terminate()
     {
         platform_window_shutdown();
         LOG_INFO("Window subsystem shutdown complete.");
+    }
+
+    // Завершение системы событий.
+    if(event_system_is_initialized())
+    {
+        event_system_shutdown();
+        LOG_INFO("Event system shutdown complete.");
     }
 
     // Завершение системы ввода.

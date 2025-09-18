@@ -155,7 +155,7 @@ API void log_write(log_level level, const char* filename, u32 fileline, const ch
 */
 #define LOG_INFO(...) log_write(LOG_LEVEL_INFO, __FILE_NAME__, __LINE__, __VA_ARGS__)
 
-#if DEBUG_FLAG
+#ifdef DEBUG_FLAG
     /*
         @brief Макрос для логирования сообщений уровня DEBUG.
         @note Используется только в отладочных сборках для диагностики проблем.

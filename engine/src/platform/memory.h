@@ -31,14 +31,14 @@
     @warning Не thread-safe. Должна вызываться из основного потока.
     @return true - инициализация успешна, false - произошла ошибка.
 */
-API bool platform_memory_initialize();
+bool platform_memory_initialize();
 
 /*
     @brief Завершает работу подсистемы для работы с памятью.
     @note Должна быть вызвана при завершении приложения.
     @warning Не thread-safe. Должна вызываться из основного потока.
 */
-API void platform_memory_shutdown();
+void platform_memory_shutdown();
 
 /*
     @brief Проверяет, была ли инициализирована подсистема для работы с памятью.

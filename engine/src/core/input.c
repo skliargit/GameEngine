@@ -35,7 +35,7 @@ bool input_system_initialize()
     context = mallocate(sizeof(input_system_context), MEMORY_TAG_SYSTEM);
     if(!context)
     {
-        LOG_ERROR("Failed to allocate memory for input context.");
+        LOG_ERROR("Failed to allocate memory for input system to initialize.");
         return false;
     }
     mzero(context, sizeof(input_system_context));
@@ -123,6 +123,8 @@ bool input_key_held(keyboard_key key)
 
 const char* input_key_to_str(keyboard_key key)
 {
+    ASSERT(key > KEY_UNKNOWN && key < KEY_COUNT, "Key code must be between 0 and KEY_COUNT.");
+
     static const char* key_strings[KEY_COUNT] = {
         [KEY_BACKSPACE]    = "BACKSPACE",        [KEY_TAB]          = "TAB",              [KEY_RETURN]       = "ENTER",
         [KEY_PAUSE]        = "PAUSE",            [KEY_CAPSLOCK]     = "CAPSLOCK",         [KEY_ESCAPE]       = "ESCAPE",
@@ -237,6 +239,8 @@ bool input_mouse_wheel_horizontal(i32* out_delta)
 
 const char* input_mouse_button_to_str(mouse_button button)
 {
+    ASSERT(button > BTN_UNKNOWN && button < BTN_COUNT, "Button code must be between 0 and BTN_COUNT.");
+
     static const char* button_strings[BTN_COUNT] = {
         [BTN_LEFT]     = "LEFT",    [BTN_RIGHT]    = "RIGHT",    [BTN_MIDDLE]   = "MIDDLE",
         [BTN_FORWARD]  = "FORWARD", [BTN_BACKWARD] = "BACKWARD",

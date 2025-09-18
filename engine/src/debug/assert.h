@@ -26,7 +26,7 @@
 #include <core/defines.h>
 #include <core/logger.h>
 
-#if DEBUG_FLAG
+#ifdef DEBUG_FLAG
     /*
         @brief Проверка утверждения с остановкой программы при ошибке в отладочной сборке.
         @note Если выражение ложно: выводит фатальную ошибку с текстом условия, сообщением, файлом и строкой
@@ -50,5 +50,5 @@
         @param expr Проверяемое выражение (должно быть true в нормальной ситуации).
         @param message Сообщение об ошибке для вывода в лог.
     */
-    #define ASSERT(expr, message) ((void)0)
+    #define ASSERT(expr, message) UNUSED(0)
 #endif

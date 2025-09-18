@@ -67,9 +67,11 @@ const char* memory_system_usage_str()
 
     static const char* tag_names[MEMORY_TAG_COUNT] = {
         "UNKNOWN        ",
+        "DARRAY         ",
+        "STRING         ",
         "APPLICATION    ",
         "SYSTEM         ",
-        "STRING         ",
+        "RENDERER       ",
     };
 
     //-----------------------------------------------------------------------------------------------------------------------
@@ -161,7 +163,7 @@ void* memory_allocate(u64 size, u16 alignment, memory_tag tag)
 void memory_free(void* block, u64 size, memory_tag tag)
 {
     ASSERT(context != nullptr, "Memory system not initialized. Call memory_system_initialize() first.");
-    ASSERT(block != nullptr, "Pointer to block must be non-zero.");
+    ASSERT(block != nullptr, "Pointer to block must be non-null.");
     ASSERT(size > 0, "Size must be greater than zero.");
     ASSERT(tag < MEMORY_TAG_COUNT, "Tag must be between 0 and MEMORY_TAG_COUNT.");
 

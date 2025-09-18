@@ -66,14 +66,14 @@ typedef enum console_stream {
     @warning Не thread-safe. Должна вызываться из основного потока.
     @return true - инициализация успешна, false - произошла ошибка или консоль недоступна.
 */
-API bool platform_console_initialize();
+bool platform_console_initialize();
 
 /*
     @brief Завершает работу подсистемы для работы с консолью.
     @note Должна быть вызвана при завершении приложения.
     @warning Не thread-safe. Должна вызываться из основного потока.
 */
-API void platform_console_shutdown();
+void platform_console_shutdown();
 
 /*
     @brief Проверяет, была ли инициализирована подсистема работы с консолью.
@@ -82,6 +82,14 @@ API void platform_console_shutdown();
     @return true - подсистема инициализирована и готова к работе, false - подсистема не инициализирована.
 */
 API bool platform_console_is_initialized();
+
+// TODO:
+// API void platform_console_get_resolution(u32* width, u32* height);
+// API void platfrom_console_set_cursor(u32 x, u32 y);
+// API void platform_console_set_color(console_color color);
+// API void platform_console_clear();
+// API void platform_console_write(console_srteam stream, const char* messgae);
+// API void platform_console_writef(console_stream stream, const char* format, ...);
 
 /*
     @brief Выводит сообщение в заданный стандартный поток с заданным цветом.

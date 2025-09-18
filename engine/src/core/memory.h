@@ -35,12 +35,16 @@
 typedef enum memory_tag {
     // @brief Неизвестный или неопределенный тип памяти.
     MEMORY_TAG_UNKNOWN,
+    // @brief Память используемая динамическими массивами.
+    MEMORY_TAG_DARRAY,
+    // @brief Память используемая для хранения строк.
+    MEMORY_TAG_STRING,
     // @brief Память используемая приложением.
     MEMORY_TAG_APPLICATION,
     // @brief Память используемая системами движка.
     MEMORY_TAG_SYSTEM,
-    // @brief Память используемая для хранения строк.
-    MEMORY_TAG_STRING,
+    // @brief Память используемая рендерером.
+    MEMORY_TAG_RENDERER,
     // @brief Количество тегов памяти (не является реальным тегом).
     MEMORY_TAG_COUNT
 } memory_tag;

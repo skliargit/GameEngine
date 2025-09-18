@@ -130,14 +130,14 @@ typedef struct platform_window_config {
     @brief type Тип используемого оконного бэкенда.
     @return true - инициализация успешна, false - произошла ошибка.
 */
-API bool platform_window_initialize(platform_window_backend_type type);
+bool platform_window_initialize(platform_window_backend_type type);
 
 /*
     @brief Завершает работу подсистемы для работы с окнами.
     @note Должна быть вызвана при завершении приложения, после уничтожения всех окон.
     @warning Не thread-safe. Должна вызываться из основного потока.
 */
-API void platform_window_shutdown();
+void platform_window_shutdown();
 
 /*
     @brief Проверяет, была ли инициализирована подсистема для работы с окнами.
@@ -151,7 +151,7 @@ API bool platform_window_is_initialized();
     @brief Обрабатывает оконные сообщения/события.
     @return true - оконные сообщения обработаны успешно, false - произошла ошибка.
 */
-API bool platform_window_poll_events();
+bool platform_window_poll_events();
 
 /*
     @brief Создает новое окно с указанной конфигурацией.

@@ -10,6 +10,8 @@
     #include "core/memory.h"
     #include "platform/linux/wayland_xdg_protocol.h"
     #include <wayland-client.h>
+    #include <vulkan/vulkan.h>
+    #include <vulkan/vulkan_wayland.h>
     #include <xkbcommon/xkbcommon.h>
     #include <errno.h>
     #include <string.h>
@@ -44,13 +46,13 @@
         // Текущий заголовок окна.
         char* title;
         // Текущая ширина окна в пикселях.
-        i32 width;
+        u32 width;
         // Текущая высота окна в пикселях.
-        i32 height;
+        u32 height;
         // Новая ширина окна, ожидающая применения.
-        i32 width_pending;
+        u32 width_pending;
         // Новая высота окна, ожидающая применения.
-        i32 height_pending;
+        u32 height_pending;
         // Флаг ожидания обработки изменения размера.
         bool resize_pending;
         // Фокус ввода на этом окне.
@@ -105,7 +107,7 @@
     } wayland_client;
 
     // Объявление функции для создания буфера.
-    static struct wl_buffer* wl_buffer_create(struct wl_shm* shm, i32 width, i32 height, u32 argb_color);
+    static struct wl_buffer* wl_buffer_create(struct wl_shm* shm, u32 width, u32 height, u32 argb_color);
 
     // Обявления обработчиков событий wayland.
     static void registry_add(void* data, struct wl_registry* registry, u32 name, const char* interface, u32 version);
@@ -314,7 +316,7 @@
     {
         wayland_client* client = internal_data;
 
-        LOG_TRACE("Creating window '%s' (size: %dx%d)...", config->title, config->width, config->height);
+        LOG_TRACE("Creating window '%s' (size: %ux%u)...", config->title, config->width, config->height);
 
         if(client->window)
         {
@@ -476,7 +478,7 @@
 
         if(window->resize_pending)
         {
-            LOG_TRACE("Resize event: window='%s' to %dx%d.", window->title, window->width_pending, window->height_pending);
+            LOG_TRACE("Resize event: window='%s' to %ux%u.", window->title, window->width_pending, window->height_pending);
 
             // Вызов обработчика изменения размера буфера.
             if(window->on_resize)
@@ -509,13 +511,22 @@
         UNUSED(states);
         UNUSED(xtoplevel);
 
-        platform_window* window = data;
-        if(window->width != width || window->height != height)
+        if(width < 0 || height < 0)
         {
-            window->width_pending  = width;
-            window->height_pending = height;
+            LOG_ERROR("Invalid window dimensions: %ix%i.", width, height);
+            return;
+        }
+
+        u32 width_u = (u32)width;
+        u32 height_u = (u32)height;
+
+        platform_window* window = data;
+        if(window->width != width_u || window->height != height_u)
+        {
+            window->width_pending  = width_u;
+            window->height_pending = height_u;
             window->resize_pending = true;
-            LOG_TRACE("Window resize pending: %dx%d.", width, height);
+            LOG_TRACE("Window resize pending: %ux%u.", width_u, height_u);
         }
     }
 
@@ -943,16 +954,10 @@
         UNUSED(direction);
     }
 
-    struct wl_buffer* wl_buffer_create(struct wl_shm* shm, i32 width, i32 height, u32 argb_color)
+    struct wl_buffer* wl_buffer_create(struct wl_shm* shm, u32 width, u32 height, u32 argb_color)
     {
-        i32 stride = width * 4;        // 4 x 8bit = 32bit (4 байта - а это тип i32).
-        i32 size = stride * height;
-
-        if(width <= 0 || height <= 0)
-        {
-            LOG_ERROR("Invalid buffer dimensions: %dx%d.", width, height);
-            return nullptr;
-        }
+        u32 stride = width * 4;        // 4 x 8bit = 32bit (4 байта - а это тип i32).
+        u32 size = stride * height;
 
         i32 fd = memfd_create("wayland-buffer", MFD_CLOEXEC);
         if(fd < 0)
@@ -977,19 +982,54 @@
         }
 
         // Заполнение буфера заданным цветом (ARGB).
-        i32 count = width * height;
-        for (int i = 0; i < count; ++i)
+        u32 count = width * height;
+        for (u32 i = 0; i < count; ++i)
         {
             data[i] = argb_color;
         }
         munmap(data, size);
 
         struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, size);
-        struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, width, height, stride, WL_SHM_FORMAT_ARGB8888);
+        struct wl_buffer *buffer = wl_shm_pool_create_buffer(pool, 0, (i32)width, (i32)height, (i32)stride, WL_SHM_FORMAT_ARGB8888);
         wl_shm_pool_destroy(pool);
         close(fd);
 
         return buffer;
+    }
+
+    void wayland_backend_enumerate_vulkan_extentions(u32* extention_count, const char** out_extentions)
+    {
+        static const char* extentions[] = {VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME};
+
+        if(out_extentions == nullptr)
+        {
+            *extention_count = sizeof(extentions) / sizeof(char*);
+            return;
+        }
+
+        mcopy(out_extentions, extentions, sizeof(extentions));
+    }
+
+    u32 wayland_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
+    {
+        VkWaylandSurfaceCreateInfoKHR surface_create_info = {
+            .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+            .display = window->display,
+            .surface = window->surface
+        };
+
+        return vkCreateWaylandSurfaceKHR(vulkan_instance, &surface_create_info, vulkan_allocator, *out_vulkan_surface);
+    }
+
+    void wayland_backend_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface)
+    {
+        UNUSED(window);
+        vkDestroySurfaceKHR(vulkan_instance, vulkan_surface, vulkan_allocator);
+    }
+
+    u32 wayland_backend_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index)
+    {
+        return vkGetPhysicalDeviceWaylandPresentationSupportKHR(vulkan_pyhical_device, queue_family_index, window->display);
     }
 
 #endif

@@ -6,6 +6,8 @@
     #include "core/string.h"
     #include "core/memory.h"
     #include <xcb/xcb.h>
+    #include <vulkan/vulkan.h>
+    #include <vulkan/vulkan_xcb.h>
     #include <xkbcommon/xkbcommon.h>
     #include <xkbcommon/xkbcommon-x11.h>
     #include <stdlib.h>
@@ -19,20 +21,24 @@
     #endif
 
     typedef struct platform_window {
+        // Соединение с X сервером (НАСЛЕДУЕТСЯ).
+        xcb_connection_t* connection;
         // Идентификатор окна XCB.
-        xcb_window_t id;
+        xcb_window_t window;
+        // Визуал (НАСЛЕДУЕТСЯ).
+        xcb_visualid_t visual;
         // Атом для обработки закрытия окна.
         xcb_atom_t wm_delete;
         // Текущий заголовок окна.
         char* title;
         // Текущая ширина окна в пикселях.
-        i32 width;
+        u32 width;
         // Текущая высота окна в пикселях.
-        i32 height;
+        u32 height;
         // Новая ширина окна, ожидающая применения.
-        i32 width_pending;
+        u32 width_pending;
         // Новая высота окна, ожидающая применения.
-        i32 height_pending;
+        u32 height_pending;
         // Флаг ожидания обработки изменения размера.
         bool resize_pending;
         // Фокус ввода на этом окне.
@@ -58,6 +64,8 @@
         xcb_connection_t* connection;
         // Информация о экране.
         xcb_screen_t* screen;
+        // Визуал.
+        xcb_visualid_t visual;
         // Контекст библиотеки XKBcommon для обработки раскладки клавиатуры.
         struct xkb_context* xkbcontext;
         // Карта клавиш XKB (раскладка, символы, модификаторы, группы клавиш).
@@ -103,6 +111,50 @@
             xcb_backend_shutdown(client);
             return false;
         }
+
+        // Получение визуала.
+        xcb_depth_iterator_t depth_iter = xcb_screen_allowed_depths_iterator(client->screen);
+        xcb_visualid_t visual_id = XCB_NONE;
+
+        while(depth_iter.rem)
+        {
+            xcb_depth_t* depth = depth_iter.data;
+            xcb_visualtype_iterator_t visual_iter = xcb_depth_visuals_iterator(depth);
+
+            while(visual_iter.rem)
+            {
+                xcb_visualtype_t *visual = visual_iter.data;
+
+                if(visual->_class == XCB_VISUAL_CLASS_TRUE_COLOR)
+                {
+                    // NOTE: Здесь прерывается т.к. это предпочитаемый формат.
+                    visual_id = visual->visual_id;
+                    break;
+                }
+                else if(visual->_class == XCB_VISUAL_CLASS_DIRECT_COLOR)
+                {
+                    // Возможный формат, если не будет TRUE COLOR.
+                    visual_id = visual->visual_id;
+                }
+
+                xcb_visualtype_next(&visual_iter);
+            }
+
+            if(visual_id != XCB_NONE)
+            {
+                break;
+            }
+
+            xcb_depth_next(&depth_iter);
+        }
+
+        if(visual_id == XCB_NONE)
+        {
+            LOG_ERROR("No suitable visual was found.");
+            xcb_backend_shutdown(client);
+            return false;
+        }
+        LOG_TRACE("Xcb visual found (id: %u).", visual_id);
 
         // Создание контекста XKB.
         client->xkbcontext = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
@@ -400,10 +452,10 @@
                     xcb_configure_notify_event_t* e = (xcb_configure_notify_event_t*)event;
                     if(client->window->width != e->width || client->window->height != e->height)
                     {
-                        client->window->width_pending  = e->width;
-                        client->window->height_pending = e->height;
+                        client->window->width_pending  = (u32)e->width;
+                        client->window->height_pending = (u32)e->height;
                         client->window->resize_pending = true;
-                        LOG_TRACE("Window resize pending: %dx%d.", e->width, e->height);
+                        LOG_TRACE("Window resize pending: %hux%hu.", e->width, e->height);
                     }
                 } break;
 
@@ -412,7 +464,7 @@
                 {
                     if(client->window->resize_pending)
                     {
-                        LOG_TRACE("Resize event: window='%s' to %dx%d.",
+                        LOG_TRACE("Resize event: window='%s' to %ux%u.",
                             client->window->title, client->window->width_pending, client->window->height_pending
                         );
 
@@ -516,7 +568,7 @@
     {
         xcb_client* client = internal_data;
 
-        LOG_TRACE("Creating window '%s' (size: %dx%d)...", config->title, config->width, config->height);
+        LOG_TRACE("Creating window '%s' (size: %ux%u)...", config->title, config->width, config->height);
 
         if(client->window)
         {
@@ -532,6 +584,8 @@
 
         platform_window* window = mallocate(sizeof(platform_window), MEMORY_TAG_APPLICATION);
         mzero(window, sizeof(platform_window));
+        window->connection = client->connection;
+        window->visual = client->visual;
         window->title = string_duplicate(config->title);
         window->width = config->width;
         window->height = config->height;
@@ -544,8 +598,8 @@
         window->on_mouse_wheel = config->on_mouse_wheel;
 
         // Генерация ID для нового окна.
-        window->id = xcb_generate_id(client->connection);
-        LOG_TRACE("XCB window ID: %u.", window->id);
+        window->window = xcb_generate_id(client->connection);
+        LOG_TRACE("XCB window ID: %u.", window->window);
 
         // Настройка событий окна.
         u32 value_mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;                // Установка фона и событий для окна.
@@ -560,22 +614,22 @@
 
         // Создание окна.
         xcb_create_window(
-            client->connection, XCB_COPY_FROM_PARENT, window->id, client->screen->root, 0, 0, config->width, config->height,
+            client->connection, XCB_COPY_FROM_PARENT, window->window, client->screen->root, 0, 0, config->width, config->height,
             0, XCB_WINDOW_CLASS_INPUT_OUTPUT, client->screen->root_visual, value_mask, value_list
         );
 
         // Установка заголовка окна.
         xcb_change_property(
-            client->connection, XCB_PROP_MODE_REPLACE, window->id, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
+            client->connection, XCB_PROP_MODE_REPLACE, window->window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
             string_length(window->title), window->title
         );
 
         // Установка класса окна (WM_CLASS).
         // NOTE: Согласно ICCCM и EWMH, свойство WM_CLASS состоит из двух частей: "instance_name\0class_name\0".
         char wm_class[50];
-        u32 wm_class_length = string_format(wm_class, 50, "Window%d%cGameEngineWindow", window->id, '\0') + 1;
+        u32 wm_class_length = string_format(wm_class, 50, "Window%d%cGameEngineWindow", window->window, '\0') + 1;
         xcb_change_property(
-            client->connection, XCB_PROP_MODE_REPLACE, window->id, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 8,
+            client->connection, XCB_PROP_MODE_REPLACE, window->window, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 8,
             wm_class_length, wm_class
         );
 
@@ -613,14 +667,14 @@
 
         // Подписка на WM_DELETE_WINDOW.
         xcb_change_property(
-            client->connection, XCB_PROP_MODE_REPLACE, window->id, wm_protocols, XCB_ATOM_ATOM, 32, 1, &wm_delete
+            client->connection, XCB_PROP_MODE_REPLACE, window->window, wm_protocols, XCB_ATOM_ATOM, 32, 1, &wm_delete
         );
 
         // Сохранение атома(числа) для дальнейшего использования.
         window->wm_delete = wm_delete;
 
         // Показать окно.
-        xcb_map_window(client->connection, window->id);
+        xcb_map_window(client->connection, window->window);
         if(xcb_flush(client->connection) <= 0)
         {
             LOG_ERROR("Failed to flush XCB connection (server disconnected).");
@@ -642,13 +696,48 @@
 
         // TODO: Удаление окна из списка окон.
 
-        if(window->id >= 0) xcb_destroy_window(client->connection, window->id);
+        if(window->window >= 0) xcb_destroy_window(client->connection, window->window);
         if(window->title)   string_free(window->title);
         xcb_flush(client->connection);
 
         mfree(window, sizeof(platform_window), MEMORY_TAG_APPLICATION);
         client->window = nullptr;
         LOG_TRACE("Window destroy complete.");
+    }
+
+    void xcb_backend_enumerate_vulkan_extentions(u32* extention_count, const char** out_extentions)
+    {
+        static const char* extentions[] = {VK_KHR_XCB_SURFACE_EXTENSION_NAME};
+
+        if(out_extentions == nullptr)
+        {
+            *extention_count = sizeof(extentions) / sizeof(char*);
+            return;
+        }
+
+        mcopy(out_extentions, extentions, sizeof(extentions));
+    }
+
+    u32 xcb_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
+    {
+        VkXcbSurfaceCreateInfoKHR surface_create_info = {
+            .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+            .connection = window->connection,
+            .window = window->window
+        };
+
+        return vkCreateXcbSurfaceKHR(vulkan_instance, &surface_create_info, vulkan_allocator, *out_vulkan_surface);
+    }
+
+    void xcb_backend_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface)
+    {
+        UNUSED(window);
+        vkDestroySurfaceKHR(vulkan_instance, vulkan_surface, vulkan_allocator);
+    }
+
+    u32 xcb_backend_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index)
+    {
+        return vkGetPhysicalDeviceXcbPresentationSupportKHR(vulkan_pyhical_device, queue_family_index, window->connection, window->visual);
     }
 
 #endif

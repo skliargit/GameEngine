@@ -1,13 +1,55 @@
 #include <application.h>
 #include <core/logger.h>
 #include <core/memory.h>
-#include <core/input.h>
 #include <core/string.h>
 #include <core/timer.h>
+#include <core/input.h>
+#include <core/event.h>
+
+bool game_event_handler(event_code code, void* sender, void* listener, event_context* data)
+{
+    UNUSED(sender);
+    UNUSED(listener);
+
+    switch(code)
+    {
+        case EVENT_CODE_APPLICATION_QUIT:
+            LOG_DEBUG("Game event quit.");
+            break;
+        case EVENT_CODE_APPLICATION_RESIZE:
+            LOG_DEBUG("Game event resize to %ux%u.", data->u32[0], data->u32[1]);
+            break;
+        case EVENT_CODE_APPLICATION_FOCUS:
+            LOG_DEBUG("Game event focus state %s.", (data->u32[0] ? "FOCUSED" : "LOST FOCUS"));
+            break;
+        case EVENT_CODE_KEYBOARD_KEY:
+            LOG_DEBUG("Game event key %s, state %s, unicode %u.", input_key_to_str(data->u32[0]), (data->u32[2] ? "PRESSED" : "RELEASED"), data->u32[1]);
+            break;
+        case EVENT_CODE_MOUSE_BUTTON:
+            LOG_DEBUG("Game event button %s, state %s.", input_mouse_button_to_str(data->u32[0]), (data->u32[1] ? "PRESSED" : "RELEASED"));
+            break;
+        case EVENT_CODE_MOUSE_WHEEL:
+            LOG_DEBUG("Game event wheel v:%i, h:%i.", data->i32[0], data->i32[1]);
+            break;
+        default:
+            return false;
+    }
+
+    return true;
+}
 
 static bool game_initialize(const application_config* config)
 {
     UNUSED(config);
+
+    event_register(EVENT_CODE_APPLICATION_QUIT, nullptr, game_event_handler);
+    event_register(EVENT_CODE_APPLICATION_RESIZE, nullptr, game_event_handler);
+    event_register(EVENT_CODE_APPLICATION_FOCUS, nullptr, game_event_handler);
+    event_register(EVENT_CODE_KEYBOARD_KEY, nullptr, game_event_handler);
+    event_register(EVENT_CODE_MOUSE_BUTTON, nullptr, game_event_handler);
+    // event_register(EVENT_CODE_MOUSE_MOVE, nullptr, game_event_handler);
+    event_register(EVENT_CODE_MOUSE_WHEEL, nullptr, game_event_handler);
+
     return true;
 }
 
@@ -68,7 +110,7 @@ static bool game_render(f32 delta_time)
 int main()
 {
     // TODO: Временное отключение TRACE!
-    log_set_level(LOG_LEVEL_DEBUG);
+    // log_set_level(LOG_LEVEL_DEBUG);
 
     application_config config = {0};
     config.initialize = game_initialize;
@@ -76,12 +118,25 @@ int main()
     config.on_resize = game_on_resize;
     config.update = game_update;
     config.render = game_render;
-    config.performance.target_fps = 60;
-    config.window.backend_type = PLATFORM_WINDOW_BACKEND_TYPE_XCB;
+    config.performance.target_fps = 120;
+    config.window.backend_type = PLATFORM_WINDOW_BACKEND_TYPE_AUTO;
     config.window.title  = "Simple window";
     config.window.width  = 1024;
     config.window.height = 768;
 
-    application_initialize(&config);
-    return application_run();
+    if(!application_initialize(&config))
+    {
+        LOG_ERROR("Failed to initialize application.");
+        application_terminate();
+        return false;
+    }
+
+    if(!application_run())
+    {
+        LOG_ERROR("Failed to run application.");
+        application_terminate();
+        return false;
+    }
+
+    return true;
 }

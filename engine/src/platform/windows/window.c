@@ -27,9 +27,9 @@
         // Текущая высота окна в пикселях.
         u32 height;
         // Новая ширина окна, ожидающая применения.
-        i32 width_pending;
+        u32 width_pending;
         // Новая высота окна, ожидающая применения.
-        i32 height_pending;
+        u32 height_pending;
         // Флаг ожидания обработки изменения размера.
         bool resize_pending;
         // Фокус ввода на этом окне.
@@ -148,7 +148,7 @@
         ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
         ASSERT(config != nullptr, "Config pointer must be non-null.");
 
-        LOG_TRACE("Creating window '%s' (size: %dx%d)...", config->title, config->width, config->height);
+        LOG_TRACE("Creating window '%s' (size: %ux%u)...", config->title, config->width, config->height);
 
         if(client->window)
         {

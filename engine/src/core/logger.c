@@ -22,7 +22,7 @@ static void log_default_handler(const log_message message, const void* user_data
 
 // Контекст системы логгирования с предустановками.
 static log_system_context context = {
-#if DEBUG_FLAG
+#ifdef DEBUG_FLAG
     .level = LOG_LEVEL_TRACE,
     .handler = log_default_handler,
     .user_data = nullptr
@@ -111,6 +111,8 @@ void log_write(log_level level, const char* filename, u32 fileline, const char* 
 
 void log_default_handler(const log_message message, const void* user_data)
 {
+    UNUSED(user_data);
+
     // Текстовые метки сообщений в соответствии с уровнем по умолчанию.
     static const char* levels[LOG_LEVEL_COUNT] = {
         [LOG_LEVEL_FATAL] = "FATAL", [LOG_LEVEL_ERROR] = "ERROR", [LOG_LEVEL_WARN]  = "WARNG",
@@ -168,7 +170,4 @@ void log_default_handler(const log_message message, const void* user_data)
         // TODO: Использовать линейный распределитель или пул памяти.
         mfree(buffer, buffer_length, MEMORY_TAG_STRING);
     }
-
-    // NOTE: Не используется для функции, но компилятор ругается, а потому заглушка.
-    (void)user_data;
 }

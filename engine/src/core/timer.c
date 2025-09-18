@@ -7,21 +7,21 @@
 
 void timer_init(timer* t)
 {
-    ASSERT(t != nullptr, "Timer pointer must be non-zero.");
+    ASSERT(t != nullptr, "Timer pointer must be non-null.");
     t->start = 0.0;
     t->end = 0.0;
 }
 
 void timer_start(timer* t)
 {
-    ASSERT(t != nullptr, "Timer pointer must be non-zero.");
+    ASSERT(t != nullptr, "Timer pointer must be non-null.");
     t->start = platform_systimer_now();
     t->end = 0.0;
 }
 
 void timer_stop(timer* t)
 {
-    ASSERT(t != nullptr, "Timer pointer must be non-zero.");
+    ASSERT(t != nullptr, "Timer pointer must be non-null.");
     if(t->start > 0.0 && t->end == 0.0)
     {
         t->end = platform_systimer_now();
@@ -30,7 +30,7 @@ void timer_stop(timer* t)
 
 f64 timer_elapsed(const timer* t)
 {
-    ASSERT(t != nullptr, "Timer pointer must be non-zero.");
+    ASSERT(t != nullptr, "Timer pointer must be non-null.");
     if(t->start > 0.0 && t->end == 0.0)
     {
         return platform_systimer_now() - t->start;
@@ -40,7 +40,7 @@ f64 timer_elapsed(const timer* t)
 
 f64 timer_duration(const timer* t)
 {
-    ASSERT(t != nullptr, "Timer pointer must be non-zero.");
+    ASSERT(t != nullptr, "Timer pointer must be non-null.");
     if(t->start > 0.0 && t->end > 0.0)
     {
         return t->end - t->start;
@@ -50,13 +50,13 @@ f64 timer_duration(const timer* t)
 
 bool timer_is_running(const timer* t)
 {
-    ASSERT(t != nullptr, "Timer pointer must be non-zero.");
+    ASSERT(t != nullptr, "Timer pointer must be non-null.");
     return t->start > 0.0 && t->end == 0.0;
 }
 
 void timer_get_format(f64 time_sec, timer_format* out_format)
 {
-    ASSERT(out_format != nullptr, "Pointer must be non-zero.");
+    ASSERT(out_format != nullptr, "Pointer must be non-null.");
 
     f64 abs_time = fabs(time_sec);
 

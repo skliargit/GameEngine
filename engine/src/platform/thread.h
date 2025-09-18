@@ -31,14 +31,14 @@
     @warning Не thread-safe. Должна вызываться из основного потока.
     @return true - инициализация успешна, false - произошла ошибка.
 */
-API bool platform_thread_initialize();
+bool platform_thread_initialize();
 
 /*
     @brief Завершает работу подсистемы для работы с потоками.
     @note Должна быть вызвана при завершении приложения, после завершения всех потоков.
     @warning Не thread-safe. Должна вызываться из основного потока.
 */
-API void platform_thread_shutdown();
+void platform_thread_shutdown();
 
 /*
     @brief Проверяет, была ли инициализирована подсистема для работы с потоками.

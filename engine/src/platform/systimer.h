@@ -31,14 +31,14 @@
     @warning Не thread-safe. Должна вызываться из основного потока.
     @return true - инициализация успешна, false - произошла ошибка.
 */
-API bool platform_systimer_initialize();
+bool platform_systimer_initialize();
 
 /*
     @brief Завершает работу подсистемы для работы с таймером.
     @note Должна быть вызвана при завершении приложения.
     @warning Не thread-safe. Должна вызываться из основного потока.
 */
-API void platform_systimer_shutdown();
+void platform_systimer_shutdown();
 
 /*
     @brief Проверяет, была ли инициализирована подсистема для работы с таймером.
