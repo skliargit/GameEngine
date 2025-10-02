@@ -44,7 +44,30 @@ void memory_system_shutdown()
 {
     ASSERT(context != nullptr, "Memory system not initialized. Call memory_system_initialize() first.");
 
-    if(context->stats.total_allocated && context->stats.allocation_count)
+    bool detect_leaks = false;
+
+    // Проверка порных тэгов.
+    // NOTE: Случай, когда неверно установлены парные тэги.
+    for(u32 i = 0; i < MEMORY_TAG_COUNT; ++i)
+    {
+        if(context->stats.tagged_allocated[i] != 0)
+        {
+            detect_leaks = true;
+            break;
+        }
+    }
+
+    // Проверка общих показателей.
+    // NOTE: Случай, когда количество выделений не соответствует количеству освобождений
+    //       или количество выделенной памяти не соответствует количеству освобожденной.
+    //       Проверка хоть и избыточная, но она контролирует казалось бы невозможные случаи,
+    //       а именно по тегам нули, а количество аллокаций не сходится.
+    if(context->stats.total_allocated != 0 || context->stats.allocation_count != 0)
+    {
+        detect_leaks = true;
+    }
+
+    if(detect_leaks)
     {
         LOG_WARN("Detecting memory leaks...");
         const char* meminfo = memory_system_usage_str();

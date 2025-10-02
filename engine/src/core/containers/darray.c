@@ -22,7 +22,7 @@ void* dynamic_array_create(u64 stride, u64 capacity)
         LOG_ERROR("Failed to allocate memory for array to create.");
         return nullptr;
     }
-    mzero(header, sizeof(dynamic_array_header));
+    mzero(header, total_size);
 
     header->stride = stride;
     header->capacity = capacity;

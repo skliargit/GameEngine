@@ -10,15 +10,19 @@
 
     typedef struct platform_window_context {
         // Функция инициализации.
-        bool (*window_initialize)(void* internal_data);
+        bool (*initialize)(void* internal_data);
+        // Функция завершающая работу оконной системы.
+        void (*shutdown)(void* internal_data);
+        // Неблокирующая функция обработки сообщений окнной системы.
+        bool (*poll_events)(void* internal_data);
         // Функция создания окна.
         platform_window* (*window_create)(const platform_window_config* config, void* internal_data);
         // Функция уничтожения окна.
         void (*window_destroy)(platform_window* window, void* internal_data);
-        // Неблокирующая функция обработки сообщений окнной системы.
-        bool (*poll_events)(void* internal_data);
-        // Функция завершающая работу оконной системы.
-        void (*shutdown)(void* internal_data);
+        // Функция получения текущего заголовка окна.
+        const char* (*window_get_title)(platform_window* window);
+        // Функция получения текущих размеров окна.
+        void (*window_get_resolution)(platform_window* window, u32* width, u32* height);
         // Функция получения расширений Vulkan.
         void (*enumerate_vulkan_extensions)(u32* extension_count, const char** out_extensions);
         // Функция создания поверхности Vulkan.
@@ -109,11 +113,13 @@
         // Инициализация бэкенда.
         if(type == PLATFORM_WINDOW_BACKEND_TYPE_WAYLAND)
         {
-            context->window_initialize = wayland_backend_initialize;
+            context->initialize = wayland_backend_initialize;
+            context->shutdown = wayland_backend_shutdown;
+            context->poll_events = wayland_backend_poll_events;
             context->window_create = wayland_backend_window_create;
             context->window_destroy = wayland_backend_window_destroy;
-            context->poll_events = wayland_backend_poll_events;
-            context->shutdown = wayland_backend_shutdown;
+            context->window_get_title = wayland_backend_window_get_title;
+            context->window_get_resolution = wayland_backend_window_get_resolution;
             context->enumerate_vulkan_extensions = wayland_backend_enumerate_vulkan_extensions;
             context->create_vulkan_surface = wayland_backend_create_vulkan_surface;
             context->destroy_vulkan_surface = wayland_backend_destroy_vulkan_surface;
@@ -121,18 +127,20 @@
         }
         else if(type == PLATFORM_WINDOW_BACKEND_TYPE_XCB)
         {
-            context->window_initialize = xcb_backend_initialize;
+            context->initialize = xcb_backend_initialize;
+            context->shutdown = xcb_backend_shutdown;
+            context->poll_events = xcb_backend_poll_events;
             context->window_create = xcb_backend_window_create;
             context->window_destroy = xcb_backend_window_destroy;
-            context->poll_events = xcb_backend_poll_events;
-            context->shutdown = xcb_backend_shutdown;
+            context->window_get_title = xcb_backend_window_get_title;
+            context->window_get_resolution = xcb_backend_window_get_resolution;
             context->enumerate_vulkan_extensions = xcb_backend_enumerate_vulkan_extensions;
             context->create_vulkan_surface = xcb_backend_create_vulkan_surface;
             context->destroy_vulkan_surface = xcb_backend_destroy_vulkan_surface;
             context->supports_vulkan_presentation = xcb_backend_supports_vulkan_presentation;
         }
 
-        if(!context->window_initialize(context->internal_data))
+        if(!context->initialize(context->internal_data))
         {
             LOG_ERROR("Failed to initialize window backend (type: %d).", type);
             return false;
@@ -176,6 +184,24 @@
         ASSERT(window != nullptr, "Window pointer must be non-null.");
 
         context->window_destroy(window, context->internal_data);
+    }
+
+    const char* platform_window_get_title(platform_window* window)
+    {
+        ASSERT(context != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
+
+        return context->window_get_title(window);
+    }
+
+    void platform_window_get_resolution(platform_window* window, u32* width, u32* height)
+    {
+        ASSERT(context != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
+        ASSERT(width != nullptr, "Poiner to width must be nun-null.");
+        ASSERT(height != nullptr, "Pointer to height must be non-null.");
+
+        context->window_get_resolution(window, width, height);
     }
 
     void platform_window_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)

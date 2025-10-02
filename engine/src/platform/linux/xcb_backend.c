@@ -705,9 +705,23 @@
         LOG_TRACE("Window destroy complete.");
     }
 
+    const char* xcb_backend_window_get_title(platform_window* window)
+    {
+        return window->title;
+    }
+
+    void xcb_backend_window_get_resolution(platform_window* window, u32* width, u32* height)
+    {
+        *width = window->width;
+        *height = window->height;
+    }
+
     void xcb_backend_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
     {
-        static const char* extensions[] = {VK_KHR_XCB_SURFACE_EXTENSION_NAME};
+        static const char* extensions[] = {
+            VK_KHR_SURFACE_EXTENSION_NAME,
+            VK_KHR_XCB_SURFACE_EXTENSION_NAME
+        };
 
         if(out_extensions == nullptr)
         {
@@ -726,7 +740,7 @@
             .window = window->window
         };
 
-        return vkCreateXcbSurfaceKHR(vulkan_instance, &surface_create_info, vulkan_allocator, *out_vulkan_surface);
+        return vkCreateXcbSurfaceKHR(vulkan_instance, &surface_create_info, vulkan_allocator, (VkSurfaceKHR*)out_vulkan_surface);
     }
 
     void xcb_backend_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface)

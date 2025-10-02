@@ -219,9 +219,7 @@ bool application_initialize(const application_config* config)
     // Инициализация рендерера.
     renderer_config rendercfg = {
         .backend_type = RENDERER_BACKEND_TYPE_VULKAN,
-        .title = config->window.title,
-        .width = config->window.width,
-        .height = config->window.height
+        .window = context->window
     };
 
     if(!renderer_initialize(&rendercfg))

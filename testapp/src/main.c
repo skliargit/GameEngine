@@ -118,7 +118,7 @@ int main()
     config.on_resize = game_on_resize;
     config.update = game_update;
     config.render = game_render;
-    config.performance.target_fps = 120;
+    config.performance.target_fps = 60;
     config.window.backend_type = PLATFORM_WINDOW_BACKEND_TYPE_AUTO;
     config.window.title  = "Simple window";
     config.window.width  = 1024;

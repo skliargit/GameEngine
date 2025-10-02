@@ -165,3 +165,18 @@ API platform_window* platform_window_create(const platform_window_config* config
     @param window Указатель на контекст окна для уничтожения.
 */
 API void platform_window_destroy(platform_window* window);
+
+/*
+    @brief Получает текущий заголовок окна.
+    @param window Указатель на контекст окна для получения заголовка.
+    @return Указатель на строку с заголовком окна.
+*/
+API const char* platform_window_get_title(platform_window* window);
+
+/*
+    @brief Получает размеры клиентской области окна в пикселях.
+    @param window Указатель на контекст окна для получения размеров.
+    @param width Указатель на переменную для сохранения ширина окна.
+    @param height Указатель на переменную для сохранения высоты окна.
+*/
+API void platform_window_get_resolution(platform_window* window, u32* width, u32* height);

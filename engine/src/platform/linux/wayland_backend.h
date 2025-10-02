@@ -83,6 +83,21 @@ platform_window* wayland_backend_window_create(const platform_window_config* con
 void wayland_backend_window_destroy(platform_window* window, void* internal_data);
 
 /*
+    @brief Получает текущий заголовок окна.
+    @param window Указатель на контекст окна для получения заголовка.
+    @return Указатель на строку с заголовком окна.
+*/
+const char* wayland_backend_window_get_title(platform_window* window);
+
+/*
+    @brief Получает размеры клиентской области окна в пикселях.
+    @param window Указатель на контекст окна для получения размеров.
+    @param width Указатель на переменную для сохранения ширина окна.
+    @param height Указатель на переменную для сохранения высоты окна.
+*/
+void wayland_backend_window_get_resolution(platform_window* window, u32* width, u32* height);
+
+/*
     @brief Перечисляет расширения Vulkan, необходимые для создания поверхности окна на текущей платформе.
     @note Для получения расширения используется двухэтапный подход: первый вызов (out_extensions = nullptr)
           возвращает количество расширений, второй вызов сохраняет имена расширений в предоставленный буфер.

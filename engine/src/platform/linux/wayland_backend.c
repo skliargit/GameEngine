@@ -405,6 +405,55 @@
         LOG_TRACE("Window destroy complete.");
     }
 
+    const char* wayland_backend_window_get_title(platform_window* window)
+    {
+        return window->title;
+    }
+
+    void wayland_backend_window_get_resolution(platform_window* window, u32* width, u32* height)
+    {
+        *width = window->width;
+        *height = window->height;
+    }
+
+    void wayland_backend_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
+    {
+        static const char* extensions[] = {
+            VK_KHR_SURFACE_EXTENSION_NAME,
+            VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME
+        };
+
+        if(out_extensions == nullptr)
+        {
+            *extension_count = sizeof(extensions) / sizeof(char*);
+            return;
+        }
+
+        mcopy(out_extensions, extensions, sizeof(extensions));
+    }
+
+    u32 wayland_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
+    {
+        VkWaylandSurfaceCreateInfoKHR surface_create_info = {
+            .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+            .display = window->display,
+            .surface = window->surface
+        };
+
+        return vkCreateWaylandSurfaceKHR(vulkan_instance, &surface_create_info, vulkan_allocator, (VkSurfaceKHR*)out_vulkan_surface);
+    }
+
+    void wayland_backend_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface)
+    {
+        UNUSED(window);
+        vkDestroySurfaceKHR(vulkan_instance, vulkan_surface, vulkan_allocator);
+    }
+
+    u32 wayland_backend_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index)
+    {
+        return vkGetPhysicalDeviceWaylandPresentationSupportKHR(vulkan_pyhical_device, queue_family_index, window->display);
+    }
+
     void registry_add(void* data, struct wl_registry* registry, u32 name, const char* interface, u32 version)
     {
         static const u32 compositor_version = 4;
@@ -995,41 +1044,6 @@
         close(fd);
 
         return buffer;
-    }
-
-    void wayland_backend_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
-    {
-        static const char* extensions[] = {VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME};
-
-        if(out_extensions == nullptr)
-        {
-            *extension_count = sizeof(extensions) / sizeof(char*);
-            return;
-        }
-
-        mcopy(out_extensions, extensions, sizeof(extensions));
-    }
-
-    u32 wayland_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
-    {
-        VkWaylandSurfaceCreateInfoKHR surface_create_info = {
-            .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
-            .display = window->display,
-            .surface = window->surface
-        };
-
-        return vkCreateWaylandSurfaceKHR(vulkan_instance, &surface_create_info, vulkan_allocator, *out_vulkan_surface);
-    }
-
-    void wayland_backend_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface)
-    {
-        UNUSED(window);
-        vkDestroySurfaceKHR(vulkan_instance, vulkan_surface, vulkan_allocator);
-    }
-
-    u32 wayland_backend_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index)
-    {
-        return vkGetPhysicalDeviceWaylandPresentationSupportKHR(vulkan_pyhical_device, queue_family_index, window->display);
     }
 
 #endif

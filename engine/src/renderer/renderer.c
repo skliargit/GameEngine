@@ -11,7 +11,7 @@ typedef struct renderer_backend_info {
 } renderer_backend_info;
 
 typedef struct renderer_system_context {
-    bool (*backend_initialize)(const char* title, const u32 width, const u32 height);
+    bool (*backend_initialize)(platform_window* window);
     void (*backend_shutdown)();
     void (*backend_on_resize)(const u32 width, const u32 height);
     bool (*backend_frame_begin)();
@@ -39,7 +39,7 @@ bool renderer_initialize(renderer_config* config)
         return false;
     }
 
-    context = mallocate(sizeof(renderer_system_context), MEMORY_TAG_SYSTEM);
+    context = mallocate(sizeof(renderer_system_context), MEMORY_TAG_RENDERER);
     if(!context)
     {
         LOG_ERROR("Failed to allocate memory for renderer context.");
@@ -63,7 +63,7 @@ bool renderer_initialize(renderer_config* config)
             return false;
     }
 
-    if(!context->backend_initialize(config->title, config->width, config->height))
+    if(!context->backend_initialize(config->window))
     {
         LOG_ERROR("Failed to initialize %s backend.", backend_supports[config->backend_type].name);
         renderer_shutdown();
