@@ -6,8 +6,11 @@
     #include "core/memory.h"
     #include "core/string.h"
     #include "debug/assert.h"
+    #include "renderer/renderer.h"
     #include <Windows.h>
     #include <Windowsx.h>
+    #include <vulkan/vulkan.h>
+    #include <vulkan/vulkan_win32.h>
 
     // Для включения отладки для оконной системы индивидуально.
     #ifndef DEBUG_PLATFORM_FLAG
@@ -217,6 +220,80 @@
         LOG_TRACE("Window destroy complete.");
     }
 
+    const char* platform_window_get_title(platform_window* window)
+    {
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
+
+        return window->title;
+    }
+
+    void platform_window_get_resolution(platform_window* window, u32* width, u32* height)
+    {
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
+        ASSERT(width != nullptr, "Poiner to width must be nun-null.");
+        ASSERT(height != nullptr, "Pointer to height must be non-null.");
+
+        *width = window->width;
+        *height = window->height;
+    }
+
+    void platform_window_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
+    {
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
+        ASSERT(extension_count != nullptr, "Pointer 'extension_count' must be non-null.");
+
+        static const char* extensions[] = {
+            VK_KHR_SURFACE_EXTENSION_NAME,
+            VK_KHR_WIN32_SURFACE_EXTENSION_NAME
+        };
+
+        if(out_extensions == nullptr)
+        {
+            *extension_count = sizeof(extensions) / sizeof(char*);
+            return;
+        }
+
+        mcopy(out_extensions, extensions, sizeof(extensions));
+    }
+
+    u32 platform_window_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
+    {
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
+        ASSERT(vulkan_instance != nullptr, "Vulkan instance pointer must be non-null.");
+        ASSERT(out_vulkan_surface != nullptr, "Vulkan surface pointer must be non-null.");
+
+        VkWin32SurfaceCreateInfoKHR surface_create_info = {
+            .sType     = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+            .hinstance = client->hinstance,
+            .hwnd      = window->hwnd
+        };
+
+        return vkCreateWin32SurfaceKHR(vulkan_instance, &surface_create_info, vulkan_allocator, (VkSurfaceKHR*)out_vulkan_surface);
+    }
+
+    void platform_window_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface)
+    {
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
+        ASSERT(vulkan_instance != nullptr, "Vulkan instance pointer must be non-null.");
+        ASSERT(vulkan_surface != nullptr, "Vulkan surface pointer must be non-null.");
+
+        UNUSED(window);
+        vkDestroySurfaceKHR(vulkan_instance, vulkan_surface, vulkan_allocator);
+    }
+
+    u32 platform_window_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index)
+    {
+        ASSERT(client != nullptr, "Window subsystem not initialized. Call platform_window_initialize() first.");
+        ASSERT(window != nullptr, "Window pointer must be non-null.");
+        ASSERT(vulkan_pyhical_device != nullptr, "Vulkan physical device pointer must be non-null.");
+
+        return vkGetPhysicalDeviceWin32PresentationSupportKHR(vulkan_pyhical_device, queue_family_index);
+    }
+
     static keyboard_key key_translate(u64 code, i64 param)
     {
         // TODO: Когда выключен NUMLOCK поведение NUM5 -> VK_CLEAR
@@ -395,7 +472,8 @@
                 u32 height = rect.bottom - rect.top;
 
                 LOG_TRACE("Resize event: window='%s' to %ux%u.", client->window->title, width, height);
-                if(client->window->on_resize)
+                // TODO: Временно, нужно позднее связывание обработчиков!
+                if(client->window->on_resize && renderer_system_is_initialized())
                 {
                     client->window->on_resize(width, height);
                 }

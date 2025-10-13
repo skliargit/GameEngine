@@ -8,8 +8,11 @@
 #include "core/string.h"
 #include "core/containers/darray.h"
 
+// TODO: Пересмотреть функцию, что имеют ли значения индексы очередей внутри семейства или только семейство очередей?
 bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physical, vulkan_device_config* config, vulkan_device* out_device)
 {
+    out_device->physical = physical->handle;
+
     // Проверка требований к типу устройства.
     // TODO: Проверка в соответствии с конфигурацией!
     if(physical->properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU
@@ -244,10 +247,14 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
     LOG_DEBUG("Transfer : family index %u, queue index %u%s", transfer_family_index, transfer_queue_index, transfer_dedicated ? " (DEDICATED)":"");
 
     // Сохранение значений.
-    out_device->graphics_queue.dedicated = graphics_dedicated;
-    out_device->compute_queue.dedicated  = compute_dedicated;
-    out_device->transfer_queue.dedicated = transfer_dedicated;
-    out_device->present_queue.dedicated  = present_dedicated;
+    out_device->graphics_queue.family_index = graphics_family_index;
+    out_device->graphics_queue.dedicated    = graphics_dedicated;
+    out_device->compute_queue.family_index  = compute_family_index;
+    out_device->compute_queue.dedicated     = compute_dedicated;
+    out_device->transfer_queue.family_index = transfer_family_index;
+    out_device->transfer_queue.dedicated    = transfer_dedicated;
+    out_device->present_queue.family_index  = present_family_index;
+    out_device->present_queue.dedicated     = present_dedicated;
 
     // Включение необходимых возможностей.
     VkPhysicalDeviceFeatures features = {
@@ -397,7 +404,7 @@ const char* vulkan_device_get_physical_device_type_str(VkPhysicalDeviceType type
 
     static const u32 type_name_count = sizeof(type_names) / sizeof(char*);
 
-    if(type >= type_name_count)
+    if((u32)type >= type_name_count)
     {
         LOG_WARN("Unknown vulkan physical device type: %d.", type);
         return type_names[0];

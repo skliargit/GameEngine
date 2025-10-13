@@ -216,6 +216,9 @@ bool application_initialize(const application_config* config)
     }
     LOG_INFO("Window has been created successfully.");
 
+    // TODO: При создании окна вызывает обновление экрана, пока рендерер еще не инициализирован!
+    //       Как вариант позднее связывание функций обработчиков.
+
     // Инициализация рендерера.
     renderer_config rendercfg = {
         .backend_type = RENDERER_BACKEND_TYPE_VULKAN,

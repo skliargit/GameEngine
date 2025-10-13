@@ -49,7 +49,7 @@ cd bin
 
 Для настройка переменных среды выполните в командной строке:
 ```cmd
-setx INCLUDE "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\;C:\Program Files (x86)\Windows Kits\10\Include\10.0.20348.0\shared\;C:\Program Files (x86)\Windows Kits\10\Include\10.0.20348.0\ucrt\;C:\Program Files (x86)\Windows Kits\10\Include\10.0.20348.0\um\;C:\VulkanSDK\1.4.321.0\Include\vulkan\\"
+setx INCLUDE "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\include\;C:\Program Files (x86)\Windows Kits\10\Include\10.0.20348.0\shared\;C:\Program Files (x86)\Windows Kits\10\Include\10.0.20348.0\ucrt\;C:\Program Files (x86)\Windows Kits\10\Include\10.0.20348.0\um\;C:\VulkanSDK\1.4.321.0\Include\\"
 && setx LIB "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\lib\x64\;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.20348.0\ucrt\x64\;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.20348.0\um\x64\;C:\VulkanSDK\1.4.321.0\Lib\\"
 ```
 

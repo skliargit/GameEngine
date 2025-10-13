@@ -25,8 +25,8 @@
         xcb_connection_t* connection;
         // Идентификатор окна XCB.
         xcb_window_t window;
-        // Визуал (НАСЛЕДУЕТСЯ).
-        xcb_visualid_t visual;
+        // Информация о экране (НАСЛЕДУЕТСЯ).
+        xcb_screen_t* screen;
         // Атом для обработки закрытия окна.
         xcb_atom_t wm_delete;
         // Текущий заголовок окна.
@@ -64,8 +64,6 @@
         xcb_connection_t* connection;
         // Информация о экране.
         xcb_screen_t* screen;
-        // Визуал.
-        xcb_visualid_t visual;
         // Контекст библиотеки XKBcommon для обработки раскладки клавиатуры.
         struct xkb_context* xkbcontext;
         // Карта клавиш XKB (раскладка, символы, модификаторы, группы клавиш).
@@ -111,50 +109,6 @@
             xcb_backend_shutdown(client);
             return false;
         }
-
-        // Получение визуала.
-        xcb_depth_iterator_t depth_iter = xcb_screen_allowed_depths_iterator(client->screen);
-        xcb_visualid_t visual_id = XCB_NONE;
-
-        while(depth_iter.rem)
-        {
-            xcb_depth_t* depth = depth_iter.data;
-            xcb_visualtype_iterator_t visual_iter = xcb_depth_visuals_iterator(depth);
-
-            while(visual_iter.rem)
-            {
-                xcb_visualtype_t *visual = visual_iter.data;
-
-                if(visual->_class == XCB_VISUAL_CLASS_TRUE_COLOR)
-                {
-                    // NOTE: Здесь прерывается т.к. это предпочитаемый формат.
-                    visual_id = visual->visual_id;
-                    break;
-                }
-                else if(visual->_class == XCB_VISUAL_CLASS_DIRECT_COLOR)
-                {
-                    // Возможный формат, если не будет TRUE COLOR.
-                    visual_id = visual->visual_id;
-                }
-
-                xcb_visualtype_next(&visual_iter);
-            }
-
-            if(visual_id != XCB_NONE)
-            {
-                break;
-            }
-
-            xcb_depth_next(&depth_iter);
-        }
-
-        if(visual_id == XCB_NONE)
-        {
-            LOG_ERROR("No suitable visual was found.");
-            xcb_backend_shutdown(client);
-            return false;
-        }
-        LOG_TRACE("Xcb visual found (id: %u).", visual_id);
 
         // Создание контекста XKB.
         client->xkbcontext = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
@@ -585,7 +539,7 @@
         platform_window* window = mallocate(sizeof(platform_window), MEMORY_TAG_APPLICATION);
         mzero(window, sizeof(platform_window));
         window->connection = client->connection;
-        window->visual = client->visual;
+        window->screen = client->screen;
         window->title = string_duplicate(config->title);
         window->width = config->width;
         window->height = config->height;
@@ -735,7 +689,7 @@
     u32 xcb_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
     {
         VkXcbSurfaceCreateInfoKHR surface_create_info = {
-            .sType = VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR,
+            .sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
             .connection = window->connection,
             .window = window->window
         };
@@ -751,7 +705,9 @@
 
     u32 xcb_backend_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index)
     {
-        return vkGetPhysicalDeviceXcbPresentationSupportKHR(vulkan_pyhical_device, queue_family_index, window->connection, window->visual);
+        return vkGetPhysicalDeviceXcbPresentationSupportKHR(
+            vulkan_pyhical_device, queue_family_index, window->connection, window->screen->root_visual
+        );
     }
 
 #endif

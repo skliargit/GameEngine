@@ -534,20 +534,22 @@
             {
                 window->on_resize(window->width_pending, window->height_pending);
             }
+            // if(window->background)
+            // {
+            //     wl_buffer_destroy(window->background);
+            //     window->background = wl_buffer_create(
+            //         window->shm, window->width_pending, window->height_pending, window->background_color
+            //     );
 
-            // TODO: Запретить обновлять при рендере!
-            // Пересоздание буфера с новым размером, но только если он был создан.
-            if(window->background)
-            {
-                wl_buffer_destroy(window->background);
-                window->background = wl_buffer_create(
-                    window->shm, window->width_pending, window->height_pending, window->background_color
-                );
+            //     wl_surface_attach(window->surface, window->background, 0, 0);
+            //     wl_surface_commit(window->surface);
+            //     wl_display_flush(window->display);
+            // }
 
-                wl_surface_attach(window->surface, window->background, 0, 0);
-                wl_surface_commit(window->surface);
-                wl_display_flush(window->display);
-            }
+            // TODO: Убрать?
+            // FIX: Плавность изменения, пока цепочка обмена не запущена.
+            wl_surface_commit(window->surface);
+            wl_display_flush(window->display);
 
             window->width = window->width_pending;
             window->height = window->height_pending;

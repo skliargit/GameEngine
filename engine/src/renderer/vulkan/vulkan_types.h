@@ -5,24 +5,24 @@
 
 typedef struct platform_window platform_window;
 
-// @brief Информация о поддержке цепочки обмена устройством.
-typedef struct vulkan_swapchain_support {
-    // @brief Базовые возможности поверхности (размеры, трансформации и т.д.).
-    VkSurfaceCapabilitiesKHR capabilities;
-    // @brief Количество доступных форматов пикселей поверхности.
-    u32 format_count;
-    // @brief Массив доступных форматов пикселей (используется darray).
-    VkSurfaceFormatKHR* formats;
-    // @brief Количество доступных режимов представления (presentation modes).
-    u32 present_mode_count;
-    // @brief Массив доступных режимов представления (используется darray).
-    VkPresentModeKHR* present_modes;
-} vulkan_swapchain_support;
-
 // @brief Цепочка обмена для управления изображениями представления.
 typedef struct vulkan_swapchain {
-    // @brief Информация о поддержке возможностей цепочки обмена для поверхности.
-    // vulkan_swapchain_support support_info;
+    // @brief Указатель на цепочку обмена.
+    VkSwapchainKHR handle;
+    // @brief Размеры кадра цепочки обмена.
+    VkExtent2D image_extent;
+    // @brief Количество кадров цепочки обмена.
+    u32 image_count;
+    // @brief Формат пикселей изображения.
+    VkSurfaceFormatKHR image_format;
+    // @brief Преображования к изображениям цепочки обмена.
+    VkSurfaceTransformFlagBitsKHR image_transform;
+    // @brief Режим представления изображений.
+    VkPresentModeKHR present_mode;
+    // @brief Изображения цепочки обмена (используется darray).
+    VkImage* images;
+    // @brief Представления изображений (используется darray).
+    VkImageView* image_views;
 } vulkan_swapchain;
 
 // @brief
@@ -49,10 +49,14 @@ typedef struct vulkan_physical_device {
 
 // @brief Описание очереди и связанных с ней ресурсов.
 typedef struct vulkan_queue {
+    // @brief Индекс семейства очередей.
+    u32 family_index;
     // @brief Указатель на очередь.
     VkQueue handle;
     // @brief Указывает на выделенную очередь.
     bool dedicated;
+    // @brief Указатель на пул команд.
+    VkCommandPool command_pool;
 } vulkan_queue;
 
 // @brief Конфигурация для выбора и настройки физического устройства.
@@ -99,12 +103,24 @@ typedef struct vulkan_context {
     VkDebugUtilsMessengerEXT debug_messenger;
     // @brief Указывает на использование расширения для получения адресов функций отладки.
     bool debug_messenger_address_binding_report_using;
+
     // @brief Указатель на связанное с рендерером окно.
     platform_window* window;
     // @brief Поверхность Vulkan для отрисовки в окно.
     VkSurfaceKHR surface;
     // @brief Устройство Vulkan (GPU).
     vulkan_device device;
+    // @brief
+    u32 framebuffer_width;
+    // @brief
+    u32 framebuffer_height;
     // @brief Цепочка обмена для управления буферами представления.
     vulkan_swapchain swapchain;
+
+    // // @brief
+    // VkFormat depth_format;
+    // // @brief
+    // u8 depth_channel_count;
+    // // @brief
+    // VkImage depth_image;
 } vulkan_context;

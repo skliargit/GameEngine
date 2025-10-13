@@ -3,6 +3,7 @@
 #include "renderer/vulkan/vulkan_result.h"
 #include "renderer/vulkan/vulkan_window.h"
 #include "renderer/vulkan/vulkan_device.h"
+#include "renderer/vulkan/vulkan_swapchain.h"
 
 #include "debug/assert.h"
 #include "core/logger.h"
@@ -328,6 +329,14 @@ bool vulkan_backend_initialize(platform_window* window)
 
     // Сохранение контекста связанного окна.
     context->window = window;
+    u32 framebuffer_width = 0;
+    u32 framebuffer_height = 0;
+
+    // TODO: Проблема перед созданием рендерера, wayland окно появляется только когда создан буфер
+    //       и из-за особенностей системы (в данном случае стековой, размер выбирается автоматически другой).
+    platform_window_get_resolution(window, &framebuffer_width, &framebuffer_height);
+    context->framebuffer_width = framebuffer_width > 0 ? framebuffer_width : 1280;
+    context->framebuffer_height = framebuffer_height > 0 ? framebuffer_height : 768;
 
     VkResult vk_result = vulkan_instance_create();
     if(!vulkan_result_is_success(vk_result))
@@ -455,10 +464,16 @@ bool vulkan_backend_initialize(platform_window* window)
     }
     LOG_TRACE("Vulkan device created successfully.");
 
-    // TODO: Цепочку обмена.
+    if(!vulkan_swapchain_create(context, context->framebuffer_width, context->framebuffer_height, &context->swapchain))
+    {
+        LOG_ERROR("Failed to create vulkan swapchain.");
+        return false;
+    }
+    LOG_TRACE("Vulkan swapchain created successfully.");
+
     // TODO: Командные буферы.
     // TODO: Синхронизацию.
-    // TODO: Буферы рендеринга.
+    // TODO: Кадровые буферы.
 
     LOG_TRACE("Vulkan backend initialized successfully.");
     return true;
@@ -467,6 +482,12 @@ bool vulkan_backend_initialize(platform_window* window)
 void vulkan_backend_shutdown()
 {
     ASSERT(context != nullptr, "Vulkan backend should be initialized.");
+
+    if(context->swapchain.handle)
+    {
+        vulkan_swapchain_destroy(context, &context->swapchain);
+        LOG_TRACE("Vulkan swapchain destroy complete.");
+    }
 
     if(context->device.logical)
     {
