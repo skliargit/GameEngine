@@ -9,9 +9,11 @@
 #include "core/containers/darray.h"
 
 // TODO: Пересмотреть функцию, что имеют ли значения индексы очередей внутри семейства или только семейство очередей?
+//       Поиск семейст, для каждого типа очереди организивать стек выбора.
 bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physical, vulkan_device_config* config, vulkan_device* out_device)
 {
     out_device->physical = physical->handle;
+    out_device->memory_properties = physical->memory_properties;
 
     // Проверка требований к типу устройства.
     // TODO: Проверка в соответствии с конфигурацией!
@@ -44,6 +46,7 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
         VkExtensionProperties* available_extensions = darray_create_custom(VkExtensionProperties, available_extension_count);
         vkEnumerateDeviceExtensionProperties(physical->handle, nullptr, &available_extension_count, available_extensions);
 
+        LOG_TRACE("Vulkan device required extensions:");
         bool extentsion_not_found;
         for(u32 i = 0; i < config->extension_count; ++i)
         {
@@ -56,6 +59,8 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
                     break;
                 }
             }
+
+            LOG_TRACE(" %s %s", extentsion_not_found ? "-" : "+", config->extensions[i]);
 
             if(extentsion_not_found)
             {
@@ -237,7 +242,7 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
                            && compute_dedicated;
 
     // Указывает не необходимость синхронизации между очередеми: графики и презентации.
-    bool present_dedicated  = graphics_family_index != present_family_index; // TODO: Исправить, не совсем верно!
+    bool present_dedicated  = (graphics_family_index != present_family_index) || (graphics_queue_index != present_queue_index);
     bool graphics_dedicated = present_dedicated && compute_dedicated && transfer_dedicated;
 
     // Вывод отладочной информации по получившимся очередям.
@@ -256,33 +261,50 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
     out_device->present_queue.family_index  = present_family_index;
     out_device->present_queue.dedicated     = present_dedicated;
 
-    // Включение необходимых возможностей.
-    VkPhysicalDeviceFeatures features = {
-        .samplerAnisotropy = config->use_sampler_anisotropy ? VK_TRUE : VK_FALSE,
+    // Включение дополнительной возможности: изменение динамических состояний конвеера на лету.
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamic_state_feature = {
+        .sType                      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+        .extendedDynamicState       = VK_TRUE
+    };
+
+    // Включение дополнительной возможности: динамический рендеринг.
+    VkPhysicalDeviceDynamicRenderingFeatures dynamic_rendering_feature = {
+        .sType                      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES,
+        .pNext                      = &dynamic_state_feature,
+        .dynamicRendering           = VK_TRUE
+    };
+
+    // Включение базовых возможностей.
+    VkPhysicalDeviceFeatures2 features = {
+        .sType                      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+        .pNext                      = &dynamic_rendering_feature,
+        .features.samplerAnisotropy = config->use_sampler_anisotropy ? VK_TRUE : VK_FALSE
     };
 
     VkDeviceCreateInfo device_info = {
-        .sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-        .queueCreateInfoCount    = family_count,
-        .pQueueCreateInfos       = family_info,
-        .enabledExtensionCount   = config->extension_count,
-        .ppEnabledExtensionNames = config->extensions,
-        .pEnabledFeatures        = &features,
+        .sType                      = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+        .pNext                      = &features,
+        .pEnabledFeatures           = nullptr,                // NOTE: Смотри pNext.
+        .queueCreateInfoCount       = family_count,
+        .pQueueCreateInfos          = family_info,
+        .enabledExtensionCount      = config->extension_count,
+        .ppEnabledExtensionNames    = config->extensions,
         // NOTE: Устарело и больше не используется!
-        .enabledLayerCount       = 0,
-        .ppEnabledLayerNames     = nullptr,
+        .enabledLayerCount          = 0,
+        .ppEnabledLayerNames        = nullptr,
     };
 
-    VkResult vk_result = vkCreateDevice(physical->handle, &device_info, context->allocator, &out_device->logical);
+    VkResult result = vkCreateDevice(physical->handle, &device_info, context->allocator, &out_device->logical);
 
     // Освобождение памяти.
     darray_destroy(family_info);
 
-    if(!vulkan_result_is_success(vk_result))
+    if(!vulkan_result_is_success(result))
     {
-        LOG_ERROR("Failed to create device: %s.", vulkan_result_get_string(vk_result));
+        LOG_ERROR("Failed to create device: %s.", vulkan_result_get_string(result));
         return false;
     }
+    LOG_TRACE("Logical device created successfully.");
 
     // Получение очередей.
     vkGetDeviceQueue(out_device->logical, graphics_family_index, graphics_queue_index, &out_device->graphics_queue.handle);
@@ -298,17 +320,104 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
 
     // Доп. проверка.
     ASSERT(
-        present_dedicated || out_device->graphics_queue.handle == out_device->present_queue.handle,
+        graphics_family_index == present_family_index || out_device->graphics_queue.handle == out_device->present_queue.handle,
         "Graphics queue handle and present queue handle must be equal!"
     );
+
+    // Получение пула команд очереди графики.
+    VkCommandPoolCreateInfo graphics_command_pool_info = {
+        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = graphics_family_index,
+    };
+
+    result = vkCreateCommandPool(out_device->logical, &graphics_command_pool_info, context->allocator, &out_device->graphics_queue.command_pool);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create graphics command pool: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+    LOG_TRACE("Graphics command pool created successfully.");
+
+    // Получение пула команд очереди показа.
+    if(graphics_family_index != present_family_index)
+    {
+        VkCommandPoolCreateInfo present_command_pool_info = {
+            .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .queueFamilyIndex = present_family_index,
+        };
+
+        result = vkCreateCommandPool(out_device->logical, &present_command_pool_info, context->allocator, &out_device->present_queue.command_pool);
+        if(!vulkan_result_get_string(result))
+        {
+            LOG_ERROR("Failed to create present command pool: %s.", vulkan_result_get_string(result));
+            return false;
+        }
+        LOG_TRACE("Present command pool created successfully.");
+    }
+    else
+    {
+        out_device->present_queue.command_pool = out_device->graphics_queue.command_pool;
+        LOG_TRACE("Present command pool shared with graphics.");
+    }
+
+    // Получение вычислительного пула команд.
+    VkCommandPoolCreateInfo compute_command_pool_info = {
+        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = compute_family_index,
+    };
+
+    result = vkCreateCommandPool(out_device->logical, &compute_command_pool_info, context->allocator, &out_device->compute_queue.command_pool);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create compute command pool: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+    LOG_TRACE("Compute command pool created successfully.");
+
+    // Получение пула команд для передачи данных.
+    VkCommandPoolCreateInfo transfer_command_pool_info = {
+        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = transfer_family_index,
+    };
+
+    result = vkCreateCommandPool(out_device->logical, &transfer_command_pool_info, context->allocator, &out_device->transfer_queue.command_pool);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create transfer command pool: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+    LOG_TRACE("Transfer command pool created successfully.");
 
     return true;
 }
 
 void vulkan_device_destroy(vulkan_context* context, vulkan_device* device)
 {
+    // Освобождение пулов команд.
+    vkDestroyCommandPool(context->device.logical, device->graphics_queue.command_pool, context->allocator);
+    LOG_TRACE("Graphics command pool destroy complete.");
+
+    if(device->graphics_queue.family_index != device->present_queue.family_index)
+    {
+        vkDestroyCommandPool(context->device.logical, device->present_queue.command_pool, context->allocator);
+        LOG_TRACE("Present command pool destroy complete.");
+    }
+
+    vkDestroyCommandPool(context->device.logical, device->compute_queue.command_pool, context->allocator);
+    LOG_TRACE("Compute command pool destroy complete.");
+
+    vkDestroyCommandPool(context->device.logical, device->transfer_queue.command_pool, context->allocator);
+    LOG_TRACE("Transfer command pool destroy complete.");
+
     vkDestroyDevice(device->logical, context->allocator);
-    device->logical = nullptr;
+    LOG_TRACE("Logical device destroy complete.");
+
+    // Обнуление переменных.
+    mzero(device, sizeof(vulkan_device));
 }
 
 bool vulkan_device_enumerate_physical_devices(vulkan_context* context, u32* physical_device_count, vulkan_physical_device* physical_devices)

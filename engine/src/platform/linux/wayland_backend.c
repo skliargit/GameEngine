@@ -534,6 +534,7 @@
             {
                 window->on_resize(window->width_pending, window->height_pending);
             }
+
             // if(window->background)
             // {
             //     wl_buffer_destroy(window->background);
@@ -546,7 +547,6 @@
             //     wl_display_flush(window->display);
             // }
 
-            // TODO: Убрать?
             // FIX: Плавность изменения, пока цепочка обмена не запущена.
             wl_surface_commit(window->surface);
             wl_display_flush(window->display);

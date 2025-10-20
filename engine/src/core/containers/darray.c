@@ -3,6 +3,43 @@
 #include "core/memory.h"
 #include "debug/assert.h"
 
+static dynamic_array_header* array_resize(dynamic_array_header* old_header, u64 new_capacity)
+{
+    // Проверка на переполнение.
+    if(new_capacity > (U64_MAX - sizeof(dynamic_array_header)) / old_header->stride)
+    {
+        LOG_ERROR("Requested capacity too large: %llu.", new_capacity);
+        return nullptr;
+    }
+
+    if(old_header->capacity >= new_capacity)
+    {
+        LOG_WARN("New capacity (%llu) must be greater than current capacity (%llu).", new_capacity, old_header->capacity);
+        return nullptr;
+    }
+
+    u64 new_total_size = sizeof(dynamic_array_header) + old_header->stride * new_capacity;
+    dynamic_array_header* new_header = mallocate(new_total_size, MEMORY_TAG_DARRAY);
+    if(!new_header)
+    {
+        LOG_ERROR("Failed to allocate memory for array to resize.");
+        return nullptr;
+    }
+
+    // Копирование заголовка и данных.
+    u64 old_data_size = sizeof(dynamic_array_header) + old_header->stride * old_header->length;
+    mcopy(new_header, old_header, old_data_size);
+
+    // Обновление емкость в новом заголовке.
+    new_header->capacity = new_capacity;
+
+    // Освобождение старой памяти.
+    u64 old_total_size = sizeof(dynamic_array_header) + old_header->stride * old_header->capacity;
+    mfree(old_header, old_total_size, MEMORY_TAG_DARRAY);
+
+    return new_header;
+}
+
 void* dynamic_array_create(u64 stride, u64 capacity)
 {
     ASSERT(stride > 0, "Stride must be greater than zero.");
@@ -42,6 +79,13 @@ void dynamic_array_destroy(void* array)
     mfree(header, size, MEMORY_TAG_DARRAY);
 }
 
+bool dynamic_array_resize(void** array, u32 new_capacity)
+{
+    dynamic_array_header* old_header = (dynamic_array_header*)(*array) - 1;
+    *array = array_resize(old_header, new_capacity)->internal_data;
+    return true;
+}
+
 u64 dynamic_array_stride(void* array)
 {
     ASSERT(array != nullptr, "Array pointer must be non-null.");
@@ -66,43 +110,6 @@ u64 dynamic_array_capacity(void* array)
     return header->capacity;
 }
 
-static dynamic_array_header* dynamic_array_resize(dynamic_array_header* old_header, u64 new_capacity)
-{
-    // Проверка на переполнение.
-    if(new_capacity > (U64_MAX - sizeof(dynamic_array_header)) / old_header->stride)
-    {
-        LOG_ERROR("Requested capacity too large: %llu.", new_capacity);
-        return nullptr;
-    }
-
-    if(old_header->capacity >= new_capacity)
-    {
-        LOG_WARN("New capacity (%llu) must be greater than current capacity (%llu).", new_capacity, old_header->capacity);
-        return nullptr;
-    }
-
-    u64 new_total_size = sizeof(dynamic_array_header) + old_header->stride * new_capacity;
-    dynamic_array_header* new_header = mallocate(new_total_size, MEMORY_TAG_DARRAY);
-    if(!new_header)
-    {
-        LOG_ERROR("Failed to allocate memory for array to resize.");
-        return nullptr;
-    }
-
-    // Копирование заголовка и данных.
-    u64 old_data_size = sizeof(dynamic_array_header) + old_header->stride * old_header->length;
-    mcopy(new_header, old_header, old_data_size);
-
-    // Обновление емкость в новом заголовке.
-    new_header->capacity = new_capacity;
-
-    // Освобождение старой памяти.
-    u64 old_total_size = sizeof(dynamic_array_header) + old_header->stride * old_header->capacity;
-    mfree(old_header, old_total_size, MEMORY_TAG_DARRAY);
-
-    return new_header;
-}
-
 void dynamic_array_push(void** array, const void* data)
 {
     ASSERT(array != nullptr && *array != nullptr, "Array pointer and data pointer must be non-null.");
@@ -112,7 +119,7 @@ void dynamic_array_push(void** array, const void* data)
     if(header->length >= header->capacity)
     {
         u64 new_capacity = header->capacity * DARRAY_DEFAULT_RESIZE_FACTOR;
-        header = dynamic_array_resize(header, new_capacity);
+        header = array_resize(header, new_capacity);
         if(!header)
         {
             LOG_ERROR("Failed to resize array during push operation.");
@@ -162,7 +169,7 @@ void dynamic_array_insert(void** array, u64 index, const void* data)
     if(header->length >= header->capacity)
     {
         u64 new_capacity = header->capacity * DARRAY_DEFAULT_RESIZE_FACTOR;
-        header = dynamic_array_resize(header, new_capacity);
+        header = array_resize(header, new_capacity);
         if(!header)
         {
             LOG_ERROR("Failed to resize array during insert operation.");

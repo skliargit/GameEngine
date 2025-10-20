@@ -5,6 +5,26 @@
 
 typedef struct platform_window platform_window;
 
+// @brief Котекст экземпляра изображения в Vulkan.
+typedef struct vulkan_image {
+    // @brief Внутренний объект изображения.
+    VkImage handle;
+    // @brief Вид изображения, используется для доступа к изображению.
+    VkImageView view;
+    // @brief Память GPU изображения.
+    VkDeviceMemory memory;
+    // @brief Требования к памяти GPU.
+    VkMemoryRequirements memory_requirements;
+    // @brief Флаги свойств памяти.
+    VkMemoryPropertyFlags memory_flags;
+    // @brief Ширина изображения.
+    u32 width;
+    // @brief Высота изображения.
+    u32 height;
+    // @brief Флаг указывающий на использование памяти GPU.
+    bool use_device_local;
+} vulkan_image;
+
 // @brief Цепочка обмена для управления изображениями представления.
 typedef struct vulkan_swapchain {
     // @brief Указатель на цепочку обмена.
@@ -23,6 +43,18 @@ typedef struct vulkan_swapchain {
     VkImage* images;
     // @brief Представления изображений (используется darray).
     VkImageView* image_views;
+    // @brief
+    VkFormat depth_format;
+    // @brief
+    u8 depth_channel_count;
+    // @brief
+    vulkan_image depth_image;
+    // @brief
+    u32 image_index;
+    // @brief Номер текущего виртуального кадра для полечения и рендера.
+    u32 current_frame;
+    // @brief Количество виртуальных кадров (кадры доступные для получения, рендера и показа на экран).
+    u8 max_frames_in_flight;
 } vulkan_swapchain;
 
 // @brief
@@ -87,12 +119,27 @@ typedef struct vulkan_device {
     // @brief Очередь для вычислительных операций (в настоящее время не используется).
     vulkan_queue compute_queue;
 
+    // @brief Характеристики памяти устройства (типы памяти, размеры и т.д.).
+    VkPhysicalDeviceMemoryProperties memory_properties;
     // @brief Флаг поддержки host-visible памяти с локальным доступом от устройства.
-    // bool has_host_visible_local_memory;
+    bool has_host_visible_local_memory;
 } vulkan_device;
 
 // @brief Основной контекст рендерера.
 typedef struct vulkan_context {
+    // @brief
+    u32 frame_pending_width;
+    // @brief
+    u32 frame_pending_height;
+    // @brief
+    u32 frame_pending_generation;
+    // @brief
+    u32 frame_width;
+    // @brief
+    u32 frame_height;
+    // @brief
+    u32 frame_generation;
+
     // @brief Экземпляр Vulkan (корневой объект Vulkan API).
     VkInstance instance;
     // @brief Указатель на кастомный аллокатор памяти (может быть nullptr).
@@ -110,17 +157,18 @@ typedef struct vulkan_context {
     VkSurfaceKHR surface;
     // @brief Устройство Vulkan (GPU).
     vulkan_device device;
-    // @brief
-    u32 framebuffer_width;
-    // @brief
-    u32 framebuffer_height;
     // @brief Цепочка обмена для управления буферами представления.
     vulkan_swapchain swapchain;
 
-    // // @brief
-    // VkFormat depth_format;
-    // // @brief
-    // u8 depth_channel_count;
-    // // @brief
-    // VkImage depth_image;
+    // @brief Массив объектов синхронизации виртуальных кадров (указывает на готовые к рендеру кадры).
+    VkSemaphore* image_available_semaphores;
+    // @brief Массив объектов синхронизации виртуальных кадров (сигнализирует на показанные или пропущенные кадры).
+    VkFence* in_flight_fences;
+    // @brief Массив объектов синхронизации изображений цепочки обмена (указывает на готовые к показу кадры).
+    VkSemaphore* image_complete_semaphores;
+    // @brief Список указателей объектов синхронизации изображений цепочки обмена (только указатели).
+    VkFence* images_in_flight;
+
+    // @brief
+    VkCommandBuffer* graphics_command_buffers;
 } vulkan_context;

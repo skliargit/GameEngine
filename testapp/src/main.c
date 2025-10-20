@@ -109,7 +109,6 @@ static bool game_render(f32 delta_time)
 
 int main()
 {
-    // TODO: Временное отключение TRACE!
     // log_set_level(LOG_LEVEL_DEBUG);
 
     application_config config = {0};

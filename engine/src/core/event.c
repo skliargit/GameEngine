@@ -81,7 +81,7 @@ bool event_register(event_code code, void* listener, on_event_callback handler)
     if(context->events[code].listeners == nullptr)
     {
         context->events[code].listeners = darray_create(event_listener);
-        LOG_TRACE("Created new listener array for event code: %d.", code);
+        LOG_TRACE("Created new listener array for event code: %s (%d).", event_code_to_str(code), code);
     }
 
     // Получение текущего количества слушателей.
@@ -93,7 +93,7 @@ bool event_register(event_code code, void* listener, on_event_callback handler)
         event_listener* entry = &context->events[code].listeners[i];
         if(entry->instance == listener && entry->handler == handler)
         {
-            LOG_WARN("Event is already registered with code: %d.", code);
+            LOG_WARN("Event is already registered with code: %s (%d).", event_code_to_str(code), code);
             return false;
         }
     }
@@ -101,7 +101,7 @@ bool event_register(event_code code, void* listener, on_event_callback handler)
     // Регистрация нового слушателя.
     event_listener entry = {listener, handler};
     darray_push(context->events[code].listeners, entry);
-    LOG_TRACE("Registered event handler for event code: %d, listener: %p.", code, listener);
+    LOG_TRACE("Registered event handler for event code: %s (%d), listener: %p.", event_code_to_str(code), code, listener);
     return true;
 }
 
@@ -119,7 +119,7 @@ bool event_unregister(event_code code, void* listener, on_event_callback handler
 
     if(context->events[code].listeners == nullptr)
     {
-        LOG_WARN("Event code %d has no listeners to unregister from.", code);
+        LOG_WARN("Event code %s (%d) has no listeners to unregister from.", event_code_to_str(code), code);
         return false;
     }
 
@@ -132,12 +132,12 @@ bool event_unregister(event_code code, void* listener, on_event_callback handler
         if(entry->instance == listener && entry->handler == handler)
         {
             darray_remove(context->events[code].listeners, i, nullptr);
-            LOG_TRACE("Unregistered event handler for event code: %d, listener: %p.", code, listener);
+            LOG_TRACE("Unregistered event handler for event code: %s (%d), listener: %p.", event_code_to_str(code), code, listener);
             return true;
         }
     }
 
-    LOG_WARN("Event handler not found for unregistration. Event code: %d, listener: %p.", code, listener);
+    LOG_WARN("Event handler not found for unregistration. Event code: %s (%d), listener: %p.", event_code_to_str(code), code, listener);
     return false;
 }
 
@@ -160,7 +160,7 @@ bool event_send(event_code code, void* sender, event_context* data)
 
     // Получение текущего количества слушателей для удаления.
     u64 listener_count = darray_length(context->events[code].listeners);
-    LOG_TRACE("Dispatching event code: %d to %llu listeners.", code, listener_count);
+    LOG_TRACE("Dispatching event code: %s (%d) to %llu listeners.", event_code_to_str(code), code, listener_count);
 
     bool event_handled = false;
     for(u64 i = 0; i < listener_count; ++i)
@@ -168,7 +168,7 @@ bool event_send(event_code code, void* sender, event_context* data)
         event_listener* entry = &context->events[code].listeners[i];
         if(entry->handler(code, sender, entry->instance, data))
         {
-            LOG_TRACE("Event code: %d handled by listener: %p and propagation stopped.", code, entry->instance);
+            LOG_TRACE("Event code: %s (%d) handled by listener: %p and propagation stopped.", event_code_to_str(code), code, entry->instance);
             event_handled = true;
             break;
         }
@@ -176,8 +176,30 @@ bool event_send(event_code code, void* sender, event_context* data)
 
     if(!event_handled)
     {
-        LOG_TRACE("Event code: %d processed by all listeners without stopping propagation.", code);
+        LOG_TRACE("Event code: %s (%d) processed by all listeners without stopping propagation.", event_code_to_str(code), code);
     }
 
     return event_handled;
+}
+
+API const char* event_code_to_str(event_code code)
+{
+    static const char* strings[] = {
+        [EVENT_CODE_APPLICATION_QUIT   ] = "APPLICATION QUIT",
+        [EVENT_CODE_APPLICATION_RESIZE ] = "APPLICATION RESIZE",
+        [EVENT_CODE_APPLICATION_FOCUS  ] = "APPLICATION FOCUS",
+        [EVENT_CODE_KEYBOARD_KEY       ] = "KEYBOARD KEY",
+        [EVENT_CODE_MOUSE_BUTTON       ] = "MOUSE BUTTON",
+        [EVENT_CODE_MOUSE_MOVE         ] = "MOUSE MOVE",
+        [EVENT_CODE_MOUSE_WHEEL        ] = "MOUSE WHEEL",
+    };
+
+    static const u32 code_count = sizeof(strings) / sizeof(char*);
+
+    if(code > code_count || strings[code] == nullptr)
+    {
+        return "UNKNOWN";
+    }
+
+    return strings[code];
 }

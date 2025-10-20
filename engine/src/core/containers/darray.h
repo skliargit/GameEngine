@@ -64,6 +64,15 @@ API void* dynamic_array_create(u64 stride, u64 capacity);
 API void dynamic_array_destroy(void* array);
 
 /*
+    @brief Изменяет размер динамического массива с сохранением существующих данных.
+    @note Старый массив автоматически освобождается.
+    @param array Указатель на указатель массива (может измениться при реаллокации).
+    @param new_capacity Новая емкость массива.
+    @return true - массив успешно изменен, false - ошибка (память не перевыделена, исходный массив остается неизменным).
+*/
+API bool dynamic_array_resize(void** array, u32 new_capacity);
+
+/*
     @brief Возвращает размер элемента массива в байтах.
     @param array Указатель на массив.
     @return Размер элемента.
@@ -148,6 +157,15 @@ API void dynamic_array_set_length(void* array, u64 length);
     @param array Указатель на массив.
 */
 #define darray_destroy(array) dynamic_array_destroy((void*)array)
+
+/*
+    @brief Изменяет размер динамического массива с сохранением существующих данных.
+    @note Старый массив автоматически освобождается.
+    @param array Указатель на указатель массива (может измениться при реаллокации).
+    @param new_capacity Новая емкость массива.
+    @return true - массив успешно изменен, false - ошибка (память не перевыделена, исходный массив остается неизменным).
+*/
+#define darray_resize(array, new_capacity) dynamic_array_resize((void**)&(array), new_capacity)
 
 /*
     @brief Возвращает размер элемента массива в байтах.

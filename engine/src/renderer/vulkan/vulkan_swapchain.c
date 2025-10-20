@@ -1,8 +1,16 @@
 #include "renderer/vulkan/vulkan_swapchain.h"
 #include "renderer/vulkan/vulkan_result.h"
+#include "renderer/vulkan/vulkan_image.h"
 
 #include "core/logger.h"
+#include "core/memory.h"
 #include "core/containers/darray.h"
+
+// Получение форрмата буфер глубины.
+typedef struct depth_format {
+    VkFormat format;
+    u8 channel_count;
+} depth_format;
 
 static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* swapchain)
 {
@@ -29,6 +37,10 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
         return false;
     }
 
+    LOG_TRACE("----------------------------------------------------------");
+    LOG_TRACE("Vulkan swapchain configuration:");
+    LOG_TRACE("----------------------------------------------------------");
+
     // Выбор формата пикселей поверхности.
     swapchain->image_format = surface_formats[0];
     for(u32 i = 0; i < surface_format_count; ++i)
@@ -37,7 +49,8 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
         if(surface_format.format == VK_FORMAT_B8G8R8A8_UNORM && surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
         {
             swapchain->image_format = surface_format;
-            LOG_TRACE("Vulkan swapchain selected preferred format and color space.");
+            LOG_TRACE("  Surface format      : VK_FORMAT_B8G8R8A8_UNORM");
+            LOG_TRACE("  Surface color space : VK_COLOR_SPACE_SRGB_NONLINEAR_KHR");
             break;
         }
     }
@@ -65,6 +78,7 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
     }
 
     // Выбор режима представления поверхности.
+    // NOTE: Выбран гарантированный спецификацией режим презентации.
     swapchain->present_mode = VK_PRESENT_MODE_FIFO_KHR;
     for(u32 i = 0; i < present_mode_count; ++i)
     {
@@ -72,7 +86,7 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
         if(present_mode == VK_PRESENT_MODE_MAILBOX_KHR)
         {
             swapchain->present_mode = present_mode;
-            LOG_TRACE("Vulkan swapchain selected preferred present mode.");
+            LOG_TRACE("  Present mode        : VK_PRESENT_MODE_MAILBOX_KHR");
             break;
         }
     }
@@ -99,8 +113,8 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
     swapchain->image_extent.width  = CLAMP(width, image_extent_min.width, image_extent_max.width);
     swapchain->image_extent.height = CLAMP(height, image_extent_min.height, image_extent_max.height);
 
-    LOG_TRACE("Vulkan swapchain image width  : %u (%u..%u).", swapchain->image_extent.width, image_extent_min.width, image_extent_max.width);
-    LOG_TRACE("Vulkan swapchain image height : %u (%u..%u).", swapchain->image_extent.height, image_extent_min.height, image_extent_max.height);
+    LOG_TRACE("  Image width         : %u (%u..%u)", swapchain->image_extent.width, image_extent_min.width, image_extent_max.width);
+    LOG_TRACE("  Image height        : %u (%u..%u)", swapchain->image_extent.height, image_extent_min.height, image_extent_max.height);
 
     // Получение количества кадров.
     u32 image_count_min    = surface_capabilities.minImageCount;
@@ -111,11 +125,11 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
     if(image_count_max > 0 && swapchain->image_count > image_count_max)
     {
         swapchain->image_count = image_count_max;
-        LOG_TRACE("Vulkan swapchain image count  : %u (range: %u..%u).", swapchain->image_count, image_count_min, image_count_max);
+        LOG_TRACE("  Image count         : %u (%u..%u)", swapchain->image_count, image_count_min, image_count_max);
     }
     else
     {
-        LOG_TRACE("Vulkan swapchain image count  : %u (min: %u).", swapchain->image_count, image_count_min);
+        LOG_TRACE("  Image count         : %u (%u..inf)", swapchain->image_count, image_count_min);
     }
 
     // Преобразования к изображениям по умолчанию.
@@ -143,17 +157,18 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
 
     if(context->device.graphics_queue.family_index == context->device.present_queue.family_index)
     {
+        // NOTE: Предпочитаемый, не требует дополнительной синхронизации.
         swapchain_info.imageSharingMode      = VK_SHARING_MODE_EXCLUSIVE;
         swapchain_info.queueFamilyIndexCount = 0;
         swapchain_info.pQueueFamilyIndices   = nullptr;
-        LOG_TRACE("Vulkan swapchain image sharing mode is VK_SHARING_MODE_EXCLUSIVE (preferred).");
+        LOG_TRACE("  Image sharing mode  : VK_SHARING_MODE_EXCLUSIVE");
     }
     else
     {
         swapchain_info.imageSharingMode      = VK_SHARING_MODE_CONCURRENT;
         swapchain_info.queueFamilyIndexCount = 2;
         swapchain_info.pQueueFamilyIndices   = queue_families;
-        LOG_TRACE("Vulkan swapchain image sharing mode is VK_SHARING_MODE_CONCURRENT.");
+        LOG_TRACE("  Image sharing mode  : VK_SHARING_MODE_CONCURRENT");
     }
 
     result = vkCreateSwapchainKHR(logical, &swapchain_info, context->allocator, &swapchain->handle);
@@ -170,22 +185,24 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
         return false;
     }
 
-    // TODO: Резервировать.
-    VkImage* images = darray_create_custom(VkImage, swapchain->image_count);
-    swapchain->image_views = darray_create_custom(VkImageView, swapchain->image_count);
-    result = vkGetSwapchainImagesKHR(logical, swapchain->handle, &swapchain->image_count, images);
+    // Создание массива для хранения изобрадений.
+    swapchain->images = darray_create_custom(VkImage, swapchain->image_count);
+
+    result = vkGetSwapchainImagesKHR(logical, swapchain->handle, &swapchain->image_count, swapchain->images);
     if(!vulkan_result_is_success(result))
     {
         LOG_ERROR("Failed to get vulkan swapchain images: %s.", vulkan_result_get_string(result));
         return false;
     }
 
-    // Создание видов (указывает на то как сипользовать изображение).
+    // Создание видов (указывает на то как ипользовать изображение).
+    swapchain->image_views = darray_create_custom(VkImageView, swapchain->image_count);
+
     for(u32 i = 0; i < swapchain->image_count; ++i)
     {
         VkImageViewCreateInfo image_view_info = {
             .sType    = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-            .image    = images[i],
+            .image    = swapchain->images[i],
             .viewType = VK_IMAGE_VIEW_TYPE_2D,
             .format   = swapchain->image_format.format,
             .components.r = VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -207,36 +224,102 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
         }
     }
 
-    darray_destroy(images);
+    // Количество виртуальных кадров, которые могут находиться в презентации, так же указывает
+    // количество объектов синхронизации цепочки обмена (обычно 2-3).
+    // TODO: Должно учитывать количество кадров цепочки обмена.
+    swapchain->max_frames_in_flight = 2;
+
+    // Установка на первый виртуальный кадр.
+    swapchain->current_frame = 0;
+
+    static const char* depth_format_strings[] = {
+        "VK_FORMAT_D32_SFLOAT_S8_UINT",
+        "VK_FORMAT_D24_UNORM_S8_UINT"
+    };
+
+    static const depth_format depth_formats[] = {
+        { VK_FORMAT_D32_SFLOAT_S8_UINT, 4 },
+        { VK_FORMAT_D24_UNORM_S8_UINT,  3 },
+    };
+
+    static const u32 depth_format_count = sizeof(depth_formats) / sizeof(depth_format);
+    static const VkFormatFeatureFlags flags = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+    u32 depth_format_index = INVALID_ID32;
+    for(u32 i = 0; i < depth_format_count; ++i)
+    {
+        VkFormatProperties properties;
+        vkGetPhysicalDeviceFormatProperties(physical, depth_formats[i].format, &properties);
+
+        if((properties.linearTilingFeatures & flags) == flags || (properties.optimalTilingFeatures & flags) == flags)
+        {
+            depth_format_index = i;
+            break;
+        }
+    }
+
+    if(depth_format_index == INVALID_ID32)
+    {
+        LOG_ERROR("Failed to find a supported depth format.");
+        return false;
+    }
+
+    swapchain->depth_format = depth_formats[depth_format_index].format;
+    swapchain->depth_channel_count = depth_formats[depth_format_index].channel_count;
+    LOG_TRACE("  Depth format        : %s", depth_format_strings[depth_format_index]);
+    LOG_TRACE("  Depth channel count : %hhu", swapchain->depth_channel_count);
+
+    if(!vulkan_image_create(
+        context, width, height, swapchain->depth_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &swapchain->depth_image
+    ))
+    {
+        LOG_ERROR("Failed to create swapchain depth image.");
+        return false;
+    }
+
+    if(!vulkan_image_view_cretae(context, swapchain->depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, &swapchain->depth_image))
+    {
+        LOG_ERROR("Failed to create swapchain depth image views.");
+        return false;
+    }
+
+    LOG_TRACE("  Max frame in flight : %u", swapchain->max_frames_in_flight);
+    LOG_TRACE("----------------------------------------------------------");
 
     return true;
 }
 
 static void swapchain_destroy(vulkan_context* context, vulkan_swapchain* swapchain)
 {
+    vulkan_image_destroy(context, &swapchain->depth_image);
+
     if(swapchain->image_views)
     {
         for(u32 i = 0; i < swapchain->image_count; ++i)
         {
             vkDestroyImageView(context->device.logical, swapchain->image_views[i], context->allocator);
         }
+
         darray_destroy(swapchain->image_views);
+    }
+
+    if(swapchain->images)
+    {
+        darray_destroy(swapchain->images);
     }
 
     if(swapchain->handle)
     {
         vkDestroySwapchainKHR(context->device.logical, swapchain->handle, context->allocator);
     }
+
+    mzero(swapchain, sizeof(vulkan_swapchain));
 }
 
 bool vulkan_swapchain_create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* out_swapchain)
 {
-    if(!swapchain_create(context, width, height, out_swapchain))
-    {
-        return false;
-    }
-
-    return true;
+    return swapchain_create(context, width, height, out_swapchain);
 }
 
 void vulkan_swapchain_destroy(vulkan_context* context, vulkan_swapchain* swapchain)
@@ -247,20 +330,59 @@ void vulkan_swapchain_destroy(vulkan_context* context, vulkan_swapchain* swapcha
 bool vulkan_swapchain_recreate(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* swapchain)
 {
     swapchain_destroy(context, swapchain);
-    if(!swapchain_create(context, width, height, swapchain))
+    return swapchain_create(context, width, height, swapchain);
+}
+
+bool vulkan_swapchain_acquire_next_image_index(
+    vulkan_context* context, vulkan_swapchain* swapchain, VkSemaphore image_available_semaphore, VkFence wait_fence,
+    u64 timeout_ns, u32* out_image_index
+)
+{
+    VkResult result = vkAcquireNextImageKHR(
+        context->device.logical, swapchain->handle, timeout_ns, image_available_semaphore, wait_fence, out_image_index
+    );
+
+    if(result == VK_ERROR_OUT_OF_DATE_KHR)
     {
+        LOG_DEBUG("Recreate swapchain: %s.", vulkan_result_get_string(result));
+        vulkan_swapchain_recreate(context, context->frame_width, context->frame_height, swapchain);
+        return false;
+    }
+    else if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+    {
+        LOG_ERROR("Failed to acquire swapchain next image index: %s.", vulkan_result_get_string(result));
         return false;
     }
 
     return true;
 }
 
-void vulkan_swapchain_acquire_next_image_index()
+void vulkan_swapchain_present(
+    vulkan_context* context, vulkan_swapchain* swapchain, VkQueue present_queue, VkSemaphore image_complete_semaphore,
+    u32 present_image_index
+)
 {
-    // vkAcquireNextImageKHR(VkDevice device, VkSwapchainKHR swapchain, uint64_t timeout, VkSemaphore semaphore, VkFence fence, uint32_t *pImageIndex);
-}
+    VkPresentInfoKHR present_info = {
+        .sType              = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+        .swapchainCount     = 1,
+        .pSwapchains        = &swapchain->handle,
+        .pImageIndices      = &present_image_index,
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores    = &image_complete_semaphore,
+        .pResults           = nullptr
+    };
 
-void vulkan_swapchain_present()
-{
-    // vkQueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo);
+    VkResult result = vkQueuePresentKHR(present_queue, &present_info);
+
+    if(result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+    {
+        LOG_DEBUG("Recreate swapchain: %s.", vulkan_result_get_string(result));
+        vulkan_swapchain_recreate(context, context->frame_width, context->frame_height, swapchain);
+    }
+    else if(result != VK_SUCCESS)
+    {
+        LOG_FATAL("Failed to present swapchain image!", __FUNCTION__);
+    }
+
+    swapchain->current_frame = (swapchain->current_frame + 1) % swapchain->max_frames_in_flight;
 }

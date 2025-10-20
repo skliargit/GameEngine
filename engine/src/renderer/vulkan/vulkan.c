@@ -13,13 +13,13 @@
 
 static vulkan_context* context = nullptr;
 
-static VkResult vulkan_instance_create()
+static VkResult instance_create()
 {
     // Проверка требований к версии Vulkan API.
     u32 instance_version;
     vkEnumerateInstanceVersion(&instance_version);
 
-    u32 min_required_version = VK_API_VERSION_1_4;
+    u32 min_required_version = VK_API_VERSION_1_3;
     if(instance_version < min_required_version)
     {
         LOG_ERROR("Vulkan version %u.%u.%u is required, but only %u.%u.%u is available.",
@@ -200,13 +200,13 @@ static VkResult vulkan_instance_create()
     return result;
 }
 
-static void vulkan_instance_destroy()
+static void instance_destroy()
 {
     vkDestroyInstance(context->instance, context->allocator);
     context->instance = nullptr;
 }
 
-static VKAPI_ATTR VkBool32 VKAPI_CALL vulkan_debug_messenger_handler(
+static VKAPI_ATTR VkBool32 VKAPI_CALL debug_messenger_handler(
     VkDebugUtilsMessageSeverityFlagBitsEXT      message_severity,
     VkDebugUtilsMessageTypeFlagsEXT             message_types,
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
@@ -257,14 +257,14 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vulkan_debug_messenger_handler(
             LOG_WARN(memory_info);
             string_free(memory_info);
 
-            // DEBUG_BREAK();
+            DEBUG_BREAK();
             return VK_TRUE; // Указывает прервать работу.
     }
 
     return VK_FALSE; // Указывает продолжать работу.
 }
 
-static VkResult vulkan_debug_messenger_create()
+static VkResult debug_messenger_create()
 {
     VkDebugUtilsMessengerCreateInfoEXT messenger_info = {
         .sType           = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
@@ -276,7 +276,7 @@ static VkResult vulkan_debug_messenger_create()
                          // NOTE: Раскомментировать для получения более детального вывода сообщений.
                          // | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
                          // | VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-        .pfnUserCallback = vulkan_debug_messenger_handler,
+        .pfnUserCallback = debug_messenger_handler,
         .pUserData       = nullptr
     };
 
@@ -298,7 +298,7 @@ static VkResult vulkan_debug_messenger_create()
     return debug_messenger_create(context->instance, &messenger_info, context->allocator, &context->debug_messenger);
 }
 
-static void vulkan_debug_messenger_destroy()
+static void debug_messenger_destroy()
 {
     PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy =
         (void*)vkGetInstanceProcAddr(context->instance, "vkDestroyDebugUtilsMessengerEXT");
@@ -312,58 +312,8 @@ static void vulkan_debug_messenger_destroy()
     context->debug_messenger = nullptr;
 }
 
-bool vulkan_backend_initialize(platform_window* window)
+static bool device_create()
 {
-    ASSERT(context == nullptr, "Vulkan backend is already initialized.");
-
-    context = mallocate(sizeof(vulkan_context), MEMORY_TAG_RENDERER);
-    if(!context)
-    {
-        LOG_ERROR("Failed to allocate memory for vulkan context.");
-        return false;
-    }
-    mzero(context, sizeof(vulkan_context));
-
-    // TODO: Реализовать кастомный аллокатор.
-    context->allocator = nullptr;
-
-    // Сохранение контекста связанного окна.
-    context->window = window;
-    u32 framebuffer_width = 0;
-    u32 framebuffer_height = 0;
-
-    // TODO: Проблема перед созданием рендерера, wayland окно появляется только когда создан буфер
-    //       и из-за особенностей системы (в данном случае стековой, размер выбирается автоматически другой).
-    platform_window_get_resolution(window, &framebuffer_width, &framebuffer_height);
-    context->framebuffer_width = framebuffer_width > 0 ? framebuffer_width : 1280;
-    context->framebuffer_height = framebuffer_height > 0 ? framebuffer_height : 768;
-
-    VkResult vk_result = vulkan_instance_create();
-    if(!vulkan_result_is_success(vk_result))
-    {
-        LOG_ERROR("Failed to create vulkan instance. Result: %s.", vulkan_result_get_string(vk_result));
-        return false;
-    }
-    LOG_TRACE("Vulkan instance created successfully.");
-
-#ifdef DEBUG_FLAG
-    vk_result = vulkan_debug_messenger_create();
-    if(!vulkan_result_is_success(vk_result))
-    {
-        LOG_ERROR("Failed to create vulkan debug messenger. Result: %s.", vulkan_result_get_string(vk_result));
-        return false;
-    }
-    LOG_TRACE("Vulkan debug messenger created successfully.");
-#endif
-
-    vk_result = platform_window_create_vulkan_surface(context->window, context->instance, context->allocator, (void**)&context->surface);
-    if(!vulkan_result_is_success(vk_result))
-    {
-        LOG_ERROR("Failed to create vulkan surface. Result: %s.", vulkan_result_get_string(vk_result));
-        return false;
-    }
-    LOG_TRACE("Vulkan surfcae created successfully.");
-
     // Получение физических устройств.
     u32 physical_device_count = 0;
     vulkan_device_enumerate_physical_devices(context, &physical_device_count, nullptr);
@@ -441,6 +391,8 @@ bool vulkan_backend_initialize(platform_window* window)
     // Создание списка расширений устройства.
     const char** device_extensions = darray_create(const char*);
     darray_push(device_extensions, &VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+    darray_push(device_extensions, &VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+    darray_push(device_extensions, &VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
 
     // Конфигурация устройства.
     // TODO: Настраиваемое.
@@ -451,29 +403,218 @@ bool vulkan_backend_initialize(platform_window* window)
         .use_sampler_anisotropy = true
     };
 
-    bool b_result = vulkan_device_create(context, physical_device_selected, &device_cfg, &context->device);
+    bool result = vulkan_device_create(context, physical_device_selected, &device_cfg, &context->device);
 
     // Оcвобождение временного списка устройств и расширений устройства.
     darray_destroy(physical_devices);
     darray_destroy(device_extensions);
 
-    if(!b_result)
+    return result;
+}
+
+static void device_destroy()
+{
+    vulkan_device_destroy(context, &context->device);
+}
+
+// TODO: Количество изображений цепочки обмена может измениться, а потому реализовать пересоздание.
+static bool command_buffers_create()
+{
+    context->graphics_command_buffers = darray_create_custom(VkCommandBuffer, context->swapchain.max_frames_in_flight);
+
+    VkCommandBufferAllocateInfo allocate_info = {
+        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool        = context->device.graphics_queue.command_pool,
+        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = context->swapchain.max_frames_in_flight
+    };
+
+    VkResult result = vkAllocateCommandBuffers(context->device.logical, &allocate_info, context->graphics_command_buffers);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to allocate command buffers: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
+    return true;
+}
+
+static void command_buffer_destroy()
+{
+    vkFreeCommandBuffers(
+        context->device.logical, context->device.graphics_queue.command_pool, context->swapchain.max_frames_in_flight, context->graphics_command_buffers
+    );
+
+    darray_destroy(context->graphics_command_buffers);
+}
+
+static bool sync_objects_create()
+{
+    VkDevice logical = context->device.logical;
+    u32 image_count = context->swapchain.image_count;
+    u8 max_frames_in_flight = context->swapchain.max_frames_in_flight;
+
+    // Выделение памяти под семафоры и барьеры.
+    context->image_available_semaphores = darray_create_custom(VkSemaphore, max_frames_in_flight);
+    context->in_flight_fences           = darray_create_custom(VkFence, max_frames_in_flight);
+    context->image_complete_semaphores  = darray_create_custom(VkSemaphore, image_count);
+
+    // TODO: Так как цепочка обмена может изменить количество кадров, организовать пересоздание массива.
+    // Выделение памяти под хранение указателей барьеров для реальных кадров цепочки обмена.
+    context->images_in_flight           = darray_create_custom(VkFence, context->swapchain.image_count);
+
+    VkSemaphoreCreateInfo semaphore_info = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
+    };
+
+    // NOTE: По умолчанию создается в сигнальном состоянии, что будет говорить о том,
+    //       что изображения цепочки обмена в данный момент свободны и готовы.
+    VkFenceCreateInfo fence_info = {
+        .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+        .flags = VK_FENCE_CREATE_SIGNALED_BIT
+    };
+
+    for(u8 i = 0; i < max_frames_in_flight; ++i)
+    {
+        VkResult result = vkCreateSemaphore(logical, &semaphore_info, context->allocator, &context->image_available_semaphores[i]);
+        if(!vulkan_result_is_success(result))
+        {
+            LOG_ERROR("Failed to create 'image available semaphore %u': %s.", i, vulkan_result_get_string(result));
+            return false;
+        }
+
+        result = vkCreateFence(logical, &fence_info, context->allocator, &context->in_flight_fences[i]);
+        if(!vulkan_result_is_success(result))
+        {
+            LOG_ERROR("Failed to create 'in flight fence %u': %s.", i, vulkan_result_get_string(result));
+            return false;
+        }
+    }
+
+    for(u32 i = 0; i < image_count; ++i)
+    {
+        VkResult result = vkCreateSemaphore(logical, &semaphore_info, context->allocator, &context->image_complete_semaphores[i]);
+        if(!vulkan_result_is_success(result))
+        {
+            LOG_ERROR("Failed to create 'image complete semaphore %u': %s.", i, vulkan_result_get_string(result));
+            return false;
+        }
+    }
+
+    mzero(context->images_in_flight, sizeof(VkFence) * context->swapchain.image_count);
+    return true;
+}
+
+static void sync_objects_destroy()
+{
+    VkDevice logical = context->device.logical;
+    u32 image_count = context->swapchain.image_count;
+    u8 max_frames_in_flight = context->swapchain.max_frames_in_flight;
+
+    for(u8 i = 0; i < max_frames_in_flight; ++i)
+    {
+        vkDestroySemaphore(logical, context->image_available_semaphores[i], context->allocator);
+        vkDestroyFence(logical, context->in_flight_fences[i], context->allocator);
+    }
+
+    for(u32 i = 0; i < image_count; ++i)
+    {
+        vkDestroySemaphore(logical, context->image_complete_semaphores[i], context->allocator);
+    }
+
+    darray_destroy(context->image_available_semaphores);
+    darray_destroy(context->image_complete_semaphores);
+    darray_destroy(context->in_flight_fences);
+    darray_destroy(context->images_in_flight);
+    context->image_available_semaphores = nullptr;
+    context->image_complete_semaphores  = nullptr;
+    context->in_flight_fences = nullptr;
+    context->images_in_flight = nullptr;
+}
+
+bool vulkan_backend_initialize(platform_window* window)
+{
+    ASSERT(context == nullptr, "Vulkan backend is already initialized.");
+
+    context = mallocate(sizeof(vulkan_context), MEMORY_TAG_RENDERER);
+    if(!context)
+    {
+        LOG_ERROR("Failed to allocate memory for vulkan context.");
+        return false;
+    }
+    mzero(context, sizeof(vulkan_context));
+
+    // TODO: Реализовать кастомный аллокатор.
+    context->allocator = nullptr;
+
+    // Сохранение контекста связанного окна.
+    context->window = window;
+    u32 framebuffer_width = 0;
+    u32 framebuffer_height = 0;
+
+    // TODO: Проблема перед созданием рендерера, wayland окно появляется только когда создан буфер
+    //       и из-за особенностей системы (в данном случае стековой, размер выбирается автоматически другой).
+    platform_window_get_resolution(window, &framebuffer_width, &framebuffer_height);
+    context->frame_width = framebuffer_width > 0 ? framebuffer_width : 1280;
+    context->frame_height = framebuffer_height > 0 ? framebuffer_height : 768;
+    context->frame_generation = 0;
+    context->frame_pending_width = context->frame_width;
+    context->frame_pending_height = context->frame_height;
+    context->frame_pending_generation = context->frame_generation;
+
+    VkResult result = instance_create();
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create vulkan instance: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+    LOG_TRACE("Vulkan instance created successfully.");
+
+#ifdef DEBUG_FLAG
+    result = debug_messenger_create();
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create vulkan debug messenger: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+    LOG_TRACE("Vulkan debug messenger created successfully.");
+#endif
+
+    result = platform_window_create_vulkan_surface(context->window, context->instance, context->allocator, (void**)&context->surface);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create vulkan surface: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+    LOG_TRACE("Vulkan surfcae created successfully.");
+
+    if(!device_create())
     {
         LOG_ERROR("Failed to create vulkan device.");
         return false;
     }
     LOG_TRACE("Vulkan device created successfully.");
 
-    if(!vulkan_swapchain_create(context, context->framebuffer_width, context->framebuffer_height, &context->swapchain))
+    if(!vulkan_swapchain_create(context, context->frame_width, context->frame_height, &context->swapchain))
     {
         LOG_ERROR("Failed to create vulkan swapchain.");
         return false;
     }
     LOG_TRACE("Vulkan swapchain created successfully.");
 
-    // TODO: Командные буферы.
-    // TODO: Синхронизацию.
-    // TODO: Кадровые буферы.
+    if(!sync_objects_create())
+    {
+        LOG_ERROR("Failed to create synchronization objects.");
+        return false;
+    }
+    LOG_TRACE("Vulkan synchronization objects created successfully.");
+
+    if(!command_buffers_create())
+    {
+        LOG_ERROR("Failed to create graphics command buffer.");
+        return false;
+    }
+    LOG_TRACE("Vulkan graphics command buffers created successfully.");
 
     LOG_TRACE("Vulkan backend initialized successfully.");
     return true;
@@ -483,6 +624,24 @@ void vulkan_backend_shutdown()
 {
     ASSERT(context != nullptr, "Vulkan backend should be initialized.");
 
+    VkResult result = vkDeviceWaitIdle(context->device.logical);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to wait device operations.");
+    }
+
+    if(context->graphics_command_buffers)
+    {
+        command_buffer_destroy();
+        LOG_TRACE("Vulkan graphics command buffers destroy complete.");
+    }
+
+    if(context->image_available_semaphores || context->image_complete_semaphores || context->in_flight_fences)
+    {
+        sync_objects_destroy();
+        LOG_TRACE("Vulkan synchronization objects destroy complete.");
+    }
+
     if(context->swapchain.handle)
     {
         vulkan_swapchain_destroy(context, &context->swapchain);
@@ -491,7 +650,7 @@ void vulkan_backend_shutdown()
 
     if(context->device.logical)
     {
-        vulkan_device_destroy(context, &context->device);
+        device_destroy();
         LOG_TRACE("Vulkan device destroy complete.");
     }
 
@@ -504,13 +663,13 @@ void vulkan_backend_shutdown()
 
     if(context->debug_messenger)
     {
-        vulkan_debug_messenger_destroy();
+        debug_messenger_destroy();
         LOG_TRACE("Vulkan debug messenger destroy complete.");
     }
 
     if(context->instance)
     {
-        vulkan_instance_destroy();
+        instance_destroy();
         LOG_TRACE("Vulkan instance destroy complete.");
     }
 
@@ -526,7 +685,7 @@ bool vulkan_backend_is_supported()
     VkResult result = vkEnumerateInstanceVersion(&instance_version);
     if(!vulkan_result_is_success(result))
     {
-        LOG_TRACE("Vulkan is not supported by the system. Result: %s.", vulkan_result_get_string(result));
+        LOG_TRACE("Vulkan is not supported by the system: %s.", vulkan_result_get_string(result));
         return false;
     }
 
@@ -552,7 +711,7 @@ bool vulkan_backend_is_supported()
     result = vkCreateInstance(&instance_info, nullptr, &instance);
     if(!vulkan_result_is_success(result))
     {
-        LOG_TRACE("Failed to create Vulkan instance. Result: %s.", vulkan_result_get_string(result));
+        LOG_TRACE("Failed to create Vulkan instance: %s.", vulkan_result_get_string(result));
         return false;
     }
 
@@ -560,7 +719,7 @@ bool vulkan_backend_is_supported()
     result = vkEnumeratePhysicalDevices(instance, &device_count, nullptr);
     if(!vulkan_result_is_success(result))
     {
-        LOG_TRACE("Failed to enumerate physical devices. Result: %s.", vulkan_result_get_string(result));
+        LOG_TRACE("Failed to enumerate physical devices: %s.", vulkan_result_get_string(result));
         vkDestroyInstance(instance, nullptr);
         return false;
     }
@@ -576,7 +735,253 @@ bool vulkan_backend_is_supported()
     return true;
 }
 
-void vulkan_backend_on_resize(const u32 width, const u32 height)
+void vulkan_backend_resize(const u32 width, const u32 height)
 {
-    LOG_TRACE("Vulkan resize event to %ux%u.", width, height);
+    context->frame_pending_width = width;
+    context->frame_pending_height = height;
+    context->frame_pending_generation++;
+    LOG_TRACE("Vulkan resize event to %ux%u, generation: %u.", width, height, context->frame_pending_generation);
+}
+
+bool vulkan_backend_frame_begin()
+{
+    // Обнаружение изменения размеров окна.
+    if(context->frame_generation != context->frame_pending_generation)
+    {
+        if(context->frame_pending_width < 1 || context->frame_pending_height < 1)
+        {
+            LOG_ERROR("%s called when the window size is less than 1.", __func__);
+            return false;
+        }
+
+        VkResult result = vkDeviceWaitIdle(context->device.logical);
+        if(!vulkan_result_is_success(result))
+        {
+            LOG_ERROR("Failed wait device idle: %s.", vulkan_result_get_string(result));
+            return false;
+        }
+
+        mzero(context->images_in_flight, sizeof(VkFence) * context->swapchain.image_count);
+
+        if(!vulkan_swapchain_recreate(context, context->frame_pending_width, context->frame_pending_height, &context->swapchain))
+        {
+            LOG_ERROR("Failed to recreate swapchain.");
+            return false;
+        }
+
+        // Применение изменений цепочки обмена.
+        context->frame_width = context->frame_pending_width;
+        context->frame_height = context->frame_pending_height;
+        context->frame_generation = context->frame_pending_generation;
+
+        LOG_DEBUG("Swapchain recreate complete.");
+        return false;
+    }
+
+    // Ожидание завершения предыдущего кадра (самый ранний виртуальный кадр который был добавлен отправлен на показ).
+    u32 current_frame = context->swapchain.current_frame;
+    VkResult result = vkWaitForFences(context->device.logical, 1, &context->in_flight_fences[current_frame], VK_TRUE, U64_MAX);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to wait in-flight fence: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Получение индекса сделующего изображения из цепочки обмена.
+    // NOTE: Сохранение индекса в context->swapchain.image_index переменную необходимо, для **end_frame и только!
+    if(!vulkan_swapchain_acquire_next_image_index(
+        context, &context->swapchain, context->image_available_semaphores[current_frame], nullptr, U64_MAX, &context->swapchain.image_index
+    ))
+    {
+        LOG_ERROR("Failed to acquire next image index.");
+        return false;
+    }
+    u32 image_index = context->swapchain.image_index;
+
+    // Начало записи команд рисования.
+    VkCommandBuffer cmdbuff = context->graphics_command_buffers[current_frame];
+    VkCommandBufferBeginInfo cmdbuff_begin_info = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
+
+    result = vkBeginCommandBuffer(cmdbuff, &cmdbuff_begin_info);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to start recording to the command buffer: %s (current index: %u).", vulkan_result_get_string(result), current_frame);
+        return false;
+    }
+
+    // Установка viewport и scissor.
+    VkViewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = (f32)context->frame_width,
+        .height = (f32)context->frame_height,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+
+    VkRect2D scissor = {
+        .offset = {0, 0},
+        .extent = {context->frame_width, context->frame_height}
+    };
+
+    vkCmdSetViewport(cmdbuff, 0, 1, &viewport);
+    vkCmdSetScissor(cmdbuff, 0, 1, &scissor);
+
+    // Перевод layout изображения в COLOR_ATTACHMENT_OPTIMAL.
+    VkImageMemoryBarrier color_barrier = {
+        .sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask                   = 0,
+        .dstAccessMask                   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout                       = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout                       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .image                           = context->swapchain.images[image_index],
+        .subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+        .subresourceRange.baseMipLevel   = 0,
+        .subresourceRange.levelCount     = 1,
+        .subresourceRange.baseArrayLayer = 0,
+        .subresourceRange.layerCount     = 1
+    };
+
+    vkCmdPipelineBarrier(
+        cmdbuff, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+        0, nullptr,
+        0, nullptr,
+        1, &color_barrier
+    );
+ 
+    VkClearValue color_clear_value = { .color = {{0.2f, 0.2f, 0.2f, 1.0f }} };
+    // VkClearValue depth_clear_color = { .depthStencil = { 1.0f, 0 } };
+
+    VkRenderingAttachmentInfo color_attachment = {
+        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView   = context->swapchain.image_views[image_index],
+        .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+        .clearValue  = color_clear_value
+    };
+
+    // VkRenderingAttachmentInfo depth_attachment = {
+    //     .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+    //     .imageView   = context->swapchain.depth_image.view,
+    //     .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+    //     .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+    //     .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
+    //     .clearValue  = depth_clear_color
+    // };
+
+    VkRenderingInfo rendering_info = {
+        .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO,
+        .renderArea           = { {0, 0}, {context->frame_width, context->frame_height} },
+        .layerCount           = 1,
+        .colorAttachmentCount = 1,
+        .pColorAttachments    = &color_attachment,
+        // .pDepthAttachment     = &depth_attachment
+    };
+
+    // Начало динамического рендеринга.
+    vkCmdBeginRendering(cmdbuff, &rendering_info);
+
+    // TODO: Создание пайплайна для отрисовки.
+
+    return true;
+}
+
+bool vulkan_backend_frame_end()
+{
+    VkDevice logical = context->device.logical;
+    u32 image_index = context->swapchain.image_index;
+    u32 current_frame = context->swapchain.current_frame;
+    VkCommandBuffer cmdbuff = context->graphics_command_buffers[current_frame];
+
+    // Завершение динамического рендеринга.
+    vkCmdEndRendering(cmdbuff);
+
+    // Перевод layout изображения в PRESENT_SRC.
+    VkImageMemoryBarrier present_barrier = {
+        .sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask                   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask                   = 0,
+        .oldLayout                       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout                       = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .image                           = context->swapchain.images[image_index],
+        .subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
+        .subresourceRange.baseMipLevel   = 0,
+        .subresourceRange.levelCount     = 1,
+        .subresourceRange.baseArrayLayer = 0,
+        .subresourceRange.layerCount     = 1
+    };
+
+    vkCmdPipelineBarrier(
+        cmdbuff, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
+        0, nullptr,
+        0, nullptr,
+        1, &present_barrier
+    );
+
+    // Завершение записи комманд в буфер.    
+    VkResult result = vkEndCommandBuffer(cmdbuff);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to end recording to the command buffer: %s (current index: %u).", vulkan_result_get_string(result), current_frame);
+        return false;
+    }
+
+    // Проверка изображения цепочки обмена, что она не еще используется.
+    if(context->images_in_flight[image_index] != nullptr)
+    {
+        result = vkWaitForFences(logical, 1, &context->images_in_flight[image_index], VK_TRUE, U64_MAX);
+        if(!vulkan_result_is_success(result))
+        {
+            LOG_ERROR("Failed to wait image in flight fence: %s.", vulkan_result_get_string(result));
+        }
+    }
+
+    // Задаем барьер для текущего изображения.
+    context->images_in_flight[image_index] = context->in_flight_fences[current_frame];
+
+    // Сбрасывание барьера для текущего кадра.
+    result = vkResetFences(logical, 1, &context->in_flight_fences[current_frame]);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to reset in flight fence: %s", vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Указание ожидаемого состояние пайплайна.
+    VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+    // Отправление на выполнение записанного буфера команд.
+    // NOTE: Количество семафоров полученных кадров из цепочки обмена и готовых к показу могут отличается,
+    //       это зависит от swapchian->image_count и swapchain->max_frame_in_flight потому, что гарантировать
+    //       что запрашиваемый семафор сигнализирующий о готовности к показу (о завершении отрисовки в буфер)
+    //       не используется очередью показа в данный момент нельзя гарантировать нельзя, но функция получения
+    //       следующего индекса vkAcquireNextImageKHR может гарантировать освобождение семафора.
+    //       См. https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html
+    VkSubmitInfo submit_info = {
+        .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+        .waitSemaphoreCount   = 1,
+        .pWaitSemaphores      = &context->image_available_semaphores[current_frame],
+        .pWaitDstStageMask    = &wait_stage,
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores    = &context->image_complete_semaphores[image_index],
+        .commandBufferCount   = 1,
+        .pCommandBuffers      = &cmdbuff,
+    };
+
+    VkQueue graphics_queue = context->device.graphics_queue.handle;
+    result = vkQueueSubmit(graphics_queue, 1, &submit_info, context->in_flight_fences[current_frame]);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to submit queue: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Показ изображения.
+    VkQueue present_queue = context->device.present_queue.handle;
+    vulkan_swapchain_present(context, &context->swapchain, present_queue, context->image_complete_semaphores[image_index], image_index);
+
+    return true;
 }

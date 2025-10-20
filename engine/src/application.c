@@ -326,6 +326,9 @@ bool application_run()
                 return false;
             }
 
+            // TODO: Временно.
+            renderer_draw();
+
             // Время от начала кадра: отрисовка буфера.
             frame_stats.render_time = timer_elapsed(&frame_timer);
         }

@@ -13,7 +13,7 @@ typedef struct renderer_backend_info {
 typedef struct renderer_system_context {
     bool (*backend_initialize)(platform_window* window);
     void (*backend_shutdown)();
-    void (*backend_on_resize)(const u32 width, const u32 height);
+    void (*backend_resize)(const u32 width, const u32 height);
     bool (*backend_frame_begin)();
     bool (*backend_frame_end)();
 } renderer_system_context;
@@ -51,9 +51,11 @@ bool renderer_initialize(renderer_config* config)
     switch(config->backend_type)
     {
         case RENDERER_BACKEND_TYPE_VULKAN:
-            context->backend_initialize = vulkan_backend_initialize;
-            context->backend_shutdown = vulkan_backend_shutdown;
-            context->backend_on_resize = vulkan_backend_on_resize;
+            context->backend_initialize  = vulkan_backend_initialize;
+            context->backend_shutdown    = vulkan_backend_shutdown;
+            context->backend_resize      = vulkan_backend_resize;
+            context->backend_frame_begin = vulkan_backend_frame_begin;
+            context->backend_frame_end   = vulkan_backend_frame_end;
             break;
         case RENDERER_BACKEND_TYPE_OPENGL:
         case RENDERER_BACKEND_TYPE_DIRECTX:
@@ -90,11 +92,24 @@ bool renderer_system_is_initialized()
 void renderer_on_resize(u32 width, u32 height)
 {
     ASSERT(context != nullptr, "Renderer system should be initialized.");
-    context->backend_on_resize(width, height);
+    context->backend_resize(width, height);
 }
 
-bool rednerer_draw()
+bool renderer_draw()
 {
     ASSERT(context != nullptr, "Renderer system should be initialized.");
-    return false;
+
+    if(!context->backend_frame_begin())
+    {
+        LOG_DEBUG("Skipping begin frame.");
+        return false;
+    }
+
+    if(!context->backend_frame_end())
+    {
+        LOG_ERROR("Failed to end frame.");
+        return false;
+    }
+
+    return true;
 }

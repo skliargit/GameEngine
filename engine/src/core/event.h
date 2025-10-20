@@ -124,7 +124,7 @@ typedef union event_context {
     @param sender Указатель на объект-отправитель события (может быть nullptr).
     @param listener Указатель на объект-получатель события (может быть nullptr).
     @param data Контекст события с данными (может быть nullptr).
-    @return bool true - остановить распространение события, false - продолжить.
+    @return true - остановить распространение события, false - продолжить.
 */
 typedef bool (*on_event_callback)(event_code code, void* sender, void* listener, event_context* data);
 
@@ -150,7 +150,7 @@ API bool event_system_is_initialized();
     @param code Код события для подписки.
     @param listener Указатель на объект-слушатель (может быть nullptr).
     @param handler Функция-обработчик события.
-    @return bool true - успешная регистрация, false - ошибка.
+    @return true - успешная регистрация, false - ошибка.
 */
 API bool event_register(event_code code, void* listener, on_event_callback handler);
 
@@ -159,7 +159,7 @@ API bool event_register(event_code code, void* listener, on_event_callback handl
     @param code Код события для отписки.
     @param listener Указатель на объект-слушатель (может быть nullptr).
     @param handler Функция-обработчик события.
-    @return bool true - успешная отписка, false - ошибка.
+    @return true - успешная отписка, false - ошибка.
 */
 API bool event_unregister(event_code code, void* listener, on_event_callback handler);
 
@@ -168,6 +168,14 @@ API bool event_unregister(event_code code, void* listener, on_event_callback han
     @param code Код отправляемого события.
     @param sender Указатель на объект-отправитель (может быть nullptr).
     @param data Контекст события с данными (может быть nullptr).
-    @return bool true - событие обработано, false - ошибка отправки.
+    @return true - событие обработано, false - ошибка отправки.
 */
 API bool event_send(event_code code, void* sender, event_context* data);
+
+/*
+    @brief Получает строковое представление кода события.
+    @note Возвращаемая строка является статической и не требует освобождения.
+    @param code Код события, для которого требуется получить строковое представление.
+    @return Указатель на строку с именем события, или "UNKNOWN" для неизвестных кодов.
+*/
+API const char* event_code_to_str(event_code code);
