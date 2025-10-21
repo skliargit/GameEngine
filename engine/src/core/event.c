@@ -196,7 +196,7 @@ API const char* event_code_to_str(event_code code)
 
     static const u32 code_count = sizeof(strings) / sizeof(char*);
 
-    if(code > code_count || strings[code] == nullptr)
+    if((u32)code > code_count || strings[code] == nullptr)
     {
         return "UNKNOWN";
     }

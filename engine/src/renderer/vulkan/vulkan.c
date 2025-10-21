@@ -754,20 +754,14 @@ bool vulkan_backend_frame_begin()
             return false;
         }
 
-        VkResult result = vkDeviceWaitIdle(context->device.logical);
-        if(!vulkan_result_is_success(result))
-        {
-            LOG_ERROR("Failed wait device idle: %s.", vulkan_result_get_string(result));
-            return false;
-        }
-
-        mzero(context->images_in_flight, sizeof(VkFence) * context->swapchain.image_count);
-
         if(!vulkan_swapchain_recreate(context, context->frame_pending_width, context->frame_pending_height, &context->swapchain))
         {
             LOG_ERROR("Failed to recreate swapchain.");
             return false;
         }
+
+        // Освобождение изображений.
+        mzero(context->images_in_flight, sizeof(VkFence) * context->swapchain.image_count);
 
         // Применение изменений цепочки обмена.
         context->frame_width = context->frame_pending_width;
@@ -844,15 +838,40 @@ bool vulkan_backend_frame_begin()
         .subresourceRange.layerCount     = 1
     };
 
+    // Перевод layout буфера глубины в DEPTH_ATTACHMENT_OPTIMAL.
+    VkImageMemoryBarrier depth_barrier = {
+        .sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask                   = 0,
+        .dstAccessMask                   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .oldLayout                       = VK_IMAGE_LAYOUT_UNDEFINED,
+        .newLayout                       = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .image                           = context->swapchain.depth_image.handle,
+        .subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
+        .subresourceRange.baseMipLevel   = 0,
+        .subresourceRange.levelCount     = 1,
+        .subresourceRange.baseArrayLayer = 0,
+        .subresourceRange.layerCount     = 1
+    };
+
+    VkImageMemoryBarrier image_barriers[] = {
+        color_barrier,
+        depth_barrier
+    };
+
+    const u32 image_barrier_count = sizeof(image_barriers) / sizeof(VkImageMemoryBarrier);
+
     vkCmdPipelineBarrier(
-        cmdbuff, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+        cmdbuff,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+        0,
         0, nullptr,
         0, nullptr,
-        1, &color_barrier
+        image_barrier_count, image_barriers
     );
  
     VkClearValue color_clear_value = { .color = {{0.2f, 0.2f, 0.2f, 1.0f }} };
-    // VkClearValue depth_clear_color = { .depthStencil = { 1.0f, 0 } };
+    VkClearValue depth_clear_color = { .depthStencil = { 1.0f, 0 } };
 
     VkRenderingAttachmentInfo color_attachment = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
@@ -863,14 +882,14 @@ bool vulkan_backend_frame_begin()
         .clearValue  = color_clear_value
     };
 
-    // VkRenderingAttachmentInfo depth_attachment = {
-    //     .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
-    //     .imageView   = context->swapchain.depth_image.view,
-    //     .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-    //     .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
-    //     .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
-    //     .clearValue  = depth_clear_color
-    // };
+    VkRenderingAttachmentInfo depth_attachment = {
+        .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
+        .imageView   = context->swapchain.depth_image.view,
+        .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+        .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .clearValue  = depth_clear_color
+    };
 
     VkRenderingInfo rendering_info = {
         .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -878,7 +897,7 @@ bool vulkan_backend_frame_begin()
         .layerCount           = 1,
         .colorAttachmentCount = 1,
         .pColorAttachments    = &color_attachment,
-        // .pDepthAttachment     = &depth_attachment
+        .pDepthAttachment     = &depth_attachment
     };
 
     // Начало динамического рендеринга.
@@ -900,7 +919,7 @@ bool vulkan_backend_frame_end()
     vkCmdEndRendering(cmdbuff);
 
     // Перевод layout изображения в PRESENT_SRC.
-    VkImageMemoryBarrier present_barrier = {
+    VkImageMemoryBarrier color_barrier = {
         .sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask                   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
         .dstAccessMask                   = 0,
@@ -918,7 +937,7 @@ bool vulkan_backend_frame_end()
         cmdbuff, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
         0, nullptr,
         0, nullptr,
-        1, &present_barrier
+        1, &color_barrier
     );
 
     // Завершение записи комманд в буфер.    
@@ -930,6 +949,9 @@ bool vulkan_backend_frame_end()
     }
 
     // Проверка изображения цепочки обмена, что она не еще используется.
+    // NOTE: Приложение не обязано отображать изображения в том же порядке, в котором они были получены
+    //       - приложения могут произвольно отображать любое изображение, полученное в данный момент.
+    //       См. https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#vkQueuePresentKHR
     if(context->images_in_flight[image_index] != nullptr)
     {
         result = vkWaitForFences(logical, 1, &context->images_in_flight[image_index], VK_TRUE, U64_MAX);

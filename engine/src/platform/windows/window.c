@@ -162,20 +162,26 @@
         client->window = mallocate(sizeof(platform_window), MEMORY_TAG_APPLICATION);
         mzero(client->window, sizeof(platform_window));
 
-        client->window->title = string_duplicate(config->title);
-        client->window->width = config->width;
-        client->window->height = config->height;
-        client->window->on_close = config->on_close;
-        client->window->on_resize = config->on_resize;
-        client->window->on_focus = config->on_focus;
-        client->window->on_key = config->on_key;
+        // NOTE: При создании окна важно учитывать, что системные рамки и элементы управления (заголовок, меню и т.д.)
+        //       занимают дополнительное место. Функция ниже корректирует прямоугольник клиентской области так, чтобы
+        //       после создания окна его внутренняя рабочая область имела требуемый размер.
+        RECT rect = {0, 0, config->width, config->height};
+        AdjustWindowRect(&rect, WS_OVERLAPPEDWINDOW | WS_VISIBLE, FALSE);
+
+        client->window->title           = string_duplicate(config->title);
+        client->window->width           = config->width;
+        client->window->height          = config->height;
+        client->window->on_close        = config->on_close;
+        client->window->on_resize       = config->on_resize;
+        client->window->on_focus        = config->on_focus;
+        client->window->on_key          = config->on_key;
         client->window->on_mouse_button = config->on_mouse_button;
-        client->window->on_mouse_move = config->on_mouse_move;
-        client->window->on_mouse_wheel = config->on_mouse_wheel;
+        client->window->on_mouse_move   = config->on_mouse_move;
+        client->window->on_mouse_wheel  = config->on_mouse_wheel;
 
         client->window->hwnd = CreateWindowEx(
-            WS_EX_APPWINDOW, client->window_class, config->title, WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
-            CW_USEDEFAULT, config->width, config->height, nullptr, nullptr, client->hinstance, nullptr
+            WS_EX_APPWINDOW,client->window_class, config->title, WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
+            CW_USEDEFAULT, rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, client->hinstance, nullptr
         );
 
         if(!client->window->hwnd)
@@ -495,7 +501,7 @@
                 }
                 return 0;
 
-            case WM_DESTROY: {
+            case WM_CLOSE: {
                 LOG_TRACE("Close event for window '%s'.", client->window->title);
                 if(client->window->on_close)
                 {

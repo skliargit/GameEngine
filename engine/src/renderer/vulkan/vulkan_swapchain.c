@@ -238,8 +238,10 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
     };
 
     static const depth_format depth_formats[] = {
-        { VK_FORMAT_D32_SFLOAT_S8_UINT, 4 },
-        { VK_FORMAT_D24_UNORM_S8_UINT,  3 },
+        { VK_FORMAT_D32_SFLOAT        , 4 },
+        // TODO: Stencil!
+        // { VK_FORMAT_D32_SFLOAT_S8_UINT, 4 },
+        // { VK_FORMAT_D24_UNORM_S8_UINT,  3 },
     };
 
     static const u32 depth_format_count = sizeof(depth_formats) / sizeof(depth_format);
@@ -329,6 +331,15 @@ void vulkan_swapchain_destroy(vulkan_context* context, vulkan_swapchain* swapcha
 
 bool vulkan_swapchain_recreate(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* swapchain)
 {
+    // NOTE: Т.к. в момент показа может измениться размер окна, перед изменением цепочки обмена нужно дождаться
+    //       завершения операций на GPU и только после этого изменять цепочку обмена.
+    VkResult result = vkDeviceWaitIdle(context->device.logical);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed wait device idle: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
     swapchain_destroy(context, swapchain);
     return swapchain_create(context, width, height, swapchain);
 }

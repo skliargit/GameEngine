@@ -535,6 +535,8 @@
                 window->on_resize(window->width_pending, window->height_pending);
             }
 
+            // TODO: Решить проблему переключения буферов.
+            // NOTE: С изменением частоты кадра, меняется и время перерисовки окна.
             // if(window->background)
             // {
             //     wl_buffer_destroy(window->background);
