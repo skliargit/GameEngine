@@ -805,24 +805,6 @@ bool vulkan_backend_frame_begin()
         return false;
     }
 
-    // Установка viewport и scissor.
-    VkViewport viewport = {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = (f32)context->frame_width,
-        .height = (f32)context->frame_height,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f
-    };
-
-    VkRect2D scissor = {
-        .offset = {0, 0},
-        .extent = {context->frame_width, context->frame_height}
-    };
-
-    vkCmdSetViewport(cmdbuff, 0, 1, &viewport);
-    vkCmdSetScissor(cmdbuff, 0, 1, &scissor);
-
     // Перевод layout изображения в COLOR_ATTACHMENT_OPTIMAL.
     VkImageMemoryBarrier color_barrier = {
         .sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -869,7 +851,7 @@ bool vulkan_backend_frame_begin()
         0, nullptr,
         image_barrier_count, image_barriers
     );
- 
+
     VkClearValue color_clear_value = { .color = {{0.2f, 0.2f, 0.2f, 1.0f }} };
     VkClearValue depth_clear_color = { .depthStencil = { 1.0f, 0 } };
 
@@ -902,6 +884,24 @@ bool vulkan_backend_frame_begin()
 
     // Начало динамического рендеринга.
     vkCmdBeginRendering(cmdbuff, &rendering_info);
+
+    // Установка viewport и scissor.
+    VkViewport viewport = {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = (f32)context->frame_width,
+        .height = (f32)context->frame_height,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+
+    VkRect2D scissor = {
+        .offset = {0, 0},
+        .extent = {context->frame_width, context->frame_height}
+    };
+
+    vkCmdSetViewport(cmdbuff, 0, 1, &viewport);
+    vkCmdSetScissor(cmdbuff, 0, 1, &scissor);
 
     // TODO: Создание пайплайна для отрисовки.
 
@@ -940,7 +940,7 @@ bool vulkan_backend_frame_end()
         1, &color_barrier
     );
 
-    // Завершение записи комманд в буфер.    
+    // Завершение записи комманд в буфер.
     VkResult result = vkEndCommandBuffer(cmdbuff);
     if(!vulkan_result_is_success(result))
     {
@@ -948,7 +948,7 @@ bool vulkan_backend_frame_end()
         return false;
     }
 
-    // Проверка изображения цепочки обмена, что она не еще используется.
+    // Проверка изображения цепочки обмена, что оно еще не используется.
     // NOTE: Приложение не обязано отображать изображения в том же порядке, в котором они были получены
     //       - приложения могут произвольно отображать любое изображение, полученное в данный момент.
     //       См. https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#vkQueuePresentKHR

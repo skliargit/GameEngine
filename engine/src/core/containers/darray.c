@@ -145,13 +145,13 @@ void dynamic_array_pop(void* array, void* out_data)
         return;
     }
 
+    header->length--;
+
     if(out_data)
     {
-        void* addr = header->internal_data + header->stride * (header->length - 1);
+        void* addr = header->internal_data + header->stride * header->length;
         mcopy(out_data, addr, header->stride);
     }
-
-    header->length--;
 }
 
 void dynamic_array_insert(void** array, u64 index, const void* data)
@@ -208,6 +208,8 @@ void dynamic_array_remove(void* array, u64 index, void* out_data)
         return;
     }
 
+    header->length--;
+
     u8* addr = header->internal_data + header->stride * index;
 
     if(out_data)
@@ -215,12 +217,10 @@ void dynamic_array_remove(void* array, u64 index, void* out_data)
         mcopy(out_data, addr, header->stride);
     }
 
-    if(index < (header->length - 1))
+    if(index < header->length)
     {
-        mmove(addr, addr + header->stride, header->stride * (header->length - index - 1));
+        mmove(addr, addr + header->stride, header->stride * (header->length - index));
     }
-
-    header->length--;
 }
 
 void dynamic_array_clear(void* array, bool zero_memory)

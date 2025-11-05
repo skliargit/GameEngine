@@ -12,39 +12,41 @@ git clone https://github.com/skliargit/GameEngine.git GameEngine
 ```
 
 ## <a name="archlinux"></a>Сборка проекта на Arch Linux
-Установка зависимостей:
-
-> Обязательные пакеты: clang vulkan-headers vulkan-icd-loader vulkan-tools vulkan-validation-layers glslang
-
-> Рекомендуемые пакеты: vulkan-utility-libraries vulkan-mesa-layers vulkan-extra-layers vulkan-extra-tools vulkan-swrast
+>### ⚠️ Важно! Установка зависимостей:
+> **Обязательные:** python clang glslang vulkan-headers vulkan-icd-loader vulkan-tools vulkan-validation-layers<br>
+> **Рекомендуемые:** vulkan-utility-libraries vulkan-mesa-layers vulkan-extra-layers vulkan-extra-tools vulkan-swrast
 
 Команда для установки:
 ```sh
-pacman -S clang vulkan-headers vulkan-icd-loader vulkan-tools vulkan-validation-layers glslang
+pacman -S python clang vulkan-headers vulkan-icd-loader vulkan-tools vulkan-validation-layers glslang
 vulkan-utility-libraries vulkan-mesa-layers vulkan-extra-layers vulkan-extra-tools vulkan-swrast
 ```
 Сборка и запуск:
 ```sh
 cd GameEngine
-./clean.sh
-./build-all.sh
+./build.py clean
+./build.py debug
 cd bin
 ./testapp
 ```
 
 ## <a name="windows"></a>Сборка проекта на Windows
-Установка необходимых компонентов:
-1. LLVM:
-    + Скачать: [LLVM-21.1.0-rc1-win64](https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.0-rc1/LLVM-21.1.0-rc1-win64.exe "Ссылка на скачивание"), можно и другую версию по [ссылке](https://github.com/llvm/llvm-project/releases "Ссылка на репозиторий GitHub")
-    + При установке необходимо выбрать: добавить путь в переменную PATH
-2. MSBuildTools:
-    + Скачать: [MSBuildTools](https://aka.ms/vs/17/release/vs_BuildTools.exe "Ссылка на скачивание"), можно выбрать и другое решение по [ссылке](https://visualstudio.microsoft.com/ru/downloads/?q=build+tools "Ссылка на сайт Microsoft"), например ***community***
-    + При установке во вкладке "Отдельные компоненты" выбрать:
-        +  Пакет SDK для Windows 10 (10.0.20348.0), можно и другую версию
-        +  MSVC версия 142 - VS 2022 C++ x64/x86 Build Tools, можно и другую версию
-3. Vulkan SDK:
-    + Скачать: [VulkanSDK-windows-X64-1.4.321.1](https://sdk.lunarg.com/sdk/download/1.4.321.1/windows/vulkansdk-windows-X64-1.4.321.1.exe "Ссылка на скачивание"), можно и другую версию по [ссылке](https://vulkan.lunarg.com/sdk/home#windows "Ссылка на сайт Vulkan Lunar")
+>### ⚠️ Важно! Установка зависимостей:
+>1. LLVM:
+>    + Скачать: [LLVM-21.1.0-rc1-win64](https://github.com/llvm/llvm-project/releases/download/llvmorg-21.1.0-rc1/LLVM-21.1.0-rc1-win64.exe "Ссылка на скачивание"), можно и другую версию по [ссылке](https://github.com/llvm/llvm-project/releases "Ссылка на репозиторий github")
+>    + При установке необходимо выбрать: добавить путь в переменную PATH
+>2. MSBuildTools:
+>    + Скачать: [MSBuildTools](https://aka.ms/vs/17/release/vs_BuildTools.exe "Ссылка на скачивание"), можно выбрать и другое решение по [ссылке](https://visualstudio.microsoft.com/ru/downloads/?q=build+tools "Ссылка на сайт microsoft"), например ***community***
+>    + При установке во вкладке "Отдельные компоненты" выбрать:
+>        +  Пакет SDK для Windows 10 (10.0.20348.0), можно и другую версию
+>        +  MSVC версия 142 - VS 2022 C++ x64/x86 Build Tools, можно и другую версию
+>3. Vulkan SDK:
+>    + Скачать: [VulkanSDK-windows-X64-1.4.321.1](https://sdk.lunarg.com/sdk/download/1.4.321.1/windows/vulkansdk-windows-X64-1.4.321.1.exe "Ссылка на скачивание"), можно и другую версию по [ссылке](https://vulkan.lunarg.com/sdk/home#windows "Ссылка на сайт Vulkan Lunar")
+>4. Python:
+>    + Скачать: [Python-3.14.0](https://www.python.org/ftp/python/3.14.0/python-3.14.0-amd64.exe "Ссылка на скачивание"), можно и другую версию по [ссылке](https://www.python.org/downloads/ "Ссылка на сайт python.org")
+>    + При установке необходимо выбрать: добавить путь в переменную PATH
 
+>### ℹ️ Дополнительно:
 > Версии можно выбирать другие, но тогда пути к файлам придется подправить!
 
 Для настройка переменных среды выполните в командной строке:
@@ -53,7 +55,7 @@ setx INCLUDE "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\M
 && setx LIB "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.44.35207\lib\x64\;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.20348.0\ucrt\x64\;C:\Program Files (x86)\Windows Kits\10\Lib\10.0.20348.0\um\x64\;C:\VulkanSDK\1.4.321.0\Lib\\"
 ```
 
-Для проверки поддержки Vulkan выполните в командной строке (cmd):
+Для проверки поддержки Vulkan выполните в командной строке:
 ```cmd
 vulkaninfo
 ```
@@ -62,8 +64,8 @@ vulkaninfo
 Сборка и запуск:
 ```cmd
 cd GameEngine
-clean.bat
-build-all.bat
+build.py clean
+build.py debug
 cd bin
 testapp.exe
 ```

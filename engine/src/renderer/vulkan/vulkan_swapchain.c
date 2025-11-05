@@ -15,7 +15,7 @@ typedef struct depth_format {
 static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* swapchain)
 {
     VkPhysicalDevice physical = context->device.physical;
-    VkSurfaceKHR surface = context->surface; 
+    VkSurfaceKHR surface = context->surface;
     VkDevice logical = context->device.logical;
 
     // Запрос количество поддерживаемых форматов пикселей для заданной поверхности.
@@ -233,6 +233,7 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
     swapchain->current_frame = 0;
 
     static const char* depth_format_strings[] = {
+        "VK_FORMAT_D32_SFLOAT",
         "VK_FORMAT_D32_SFLOAT_S8_UINT",
         "VK_FORMAT_D24_UNORM_S8_UINT"
     };
