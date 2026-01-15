@@ -340,6 +340,7 @@ typedef struct range {
 */
 #define CLAMP(value, min, max) (((value) <= (min)) ? (min) : (((value) >= (max)) ? (max) : (value)))
 
+// TODO: Возможно на удаление!
 /*
     @brief Макрос вычисляет новый указатель относительно заданного указателя и смещения.
     @param pointer Указатель для вычисления нового.
@@ -348,6 +349,7 @@ typedef struct range {
 */
 #define POINTER_GET_OFFSET(pointer, offset) (void*)((u8*)pointer + (offset))
 
+// TODO: Возможно на удаление!
 /*
     @brief Макрос получает значение поля структуры заданного типом и указателем.
     @param type Тип структуры.
@@ -356,6 +358,14 @@ typedef struct range {
     @return Значение поля структуры.
 */
 #define MEMBER_GET_VALUE(type, pointer, member) (((type*)(pointer))->member)
+
+/*
+    @brief Макрос вычисляет смещение поля объекта в байтах относительно начала объекта.
+    @param type Тип объекта для поля которого необходимо получить смещение.
+    @param member Поле смещение которого необходимо получить.
+    @return Смещение поля в байтах для указанного типа объекта.
+*/
+#define MEMBER_OFFSET_U32(type, member) (u32)((usize)&(((type*)0)->member))
 
 /*
     @brief Подавляет предупреждения о неиспользуемых переменных путем явного

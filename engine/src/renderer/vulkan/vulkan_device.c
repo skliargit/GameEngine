@@ -261,7 +261,8 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
     out_device->present_queue.family_index  = present_family_index;
     out_device->present_queue.dedicated     = present_dedicated;
 
-    // Включение дополнительной возможности: изменение динамических состояний конвеера на лету.
+    // TODO: Определить когда включать!
+    // Включение дополнительной возможности: изменение динамических состояний конвейера на лету.
     VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamic_state_feature = {
         .sType                      = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
         .extendedDynamicState       = VK_TRUE
@@ -324,10 +325,12 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
         "Graphics queue handle and present queue handle must be equal!"
     );
 
+    // TODO: Изменить алгоритм создания пулов и стратегии их использования!
+
     // Получение пула команд очереди графики.
     VkCommandPoolCreateInfo graphics_command_pool_info = {
         .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, // т.к. используется для кадров, а они не являются временным явлением.
         .queueFamilyIndex = graphics_family_index,
     };
 
@@ -380,7 +383,7 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
     // Получение пула команд для передачи данных.
     VkCommandPoolCreateInfo transfer_command_pool_info = {
         .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .flags            = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
         .queueFamilyIndex = transfer_family_index,
     };
 

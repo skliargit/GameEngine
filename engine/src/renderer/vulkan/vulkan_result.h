@@ -22,6 +22,7 @@
 #include <core/defines.h>
 #include <renderer/vulkan/vulkan_types.h>
 
+// TODO: ...is_not_success
 /*
     @brief Проверяет, является ли результат Vulkan успешным.
     @note Эта функция проверяет код возврата Vulkan и возвращает true,

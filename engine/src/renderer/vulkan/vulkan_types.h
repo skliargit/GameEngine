@@ -5,18 +5,54 @@
 
 typedef struct platform_window platform_window;
 
+// @brief Тип буфера данных.
+typedef enum vulkan_buffer_type {
+    // @brief Использование буфера для вершинных данных.
+    VULKAN_BUFFER_TYPE_VERTEX,
+    // @brief Использование буфера для индексных данных.
+    VULKAN_BUFFER_TYPE_INDEX,
+    // @brief Использование буфера для uniform переменных.
+    VULKAN_BUFFER_TYPE_UNIFORM,
+    // @brief Использование буфера для подготовки целей визуализации (из оперативной памяти в видеопамять).
+    VULKAN_BUFFER_TYPE_STAGING,
+    // @brief Использование буфера для чтения целей визуализации (для чтения из видеопамяти).
+    VULKAN_BUFFER_TYPE_READ,
+    // @brief Использование буфера для хранения данных.
+    VULKAN_BUFFER_TYPE_STORAGE,
+} vulkan_buffer_type;
+
+// @brief Представляет буфер данных в Vulkan.
+typedef struct vulkan_buffer {
+    // @brief Тип буфера данных.
+    vulkan_buffer_type type;
+    // @brief Размер буфера данных в байтах.
+    u64 size;
+    // @brief Флаги использования буфера (кеш).
+    VkBufferUsageFlagBits usage;
+    // @brief Флаги свойств памяти (кеш).
+    VkMemoryPropertyFlags memory_property_flags;
+    // @brief Указатель на буфер.
+    VkBuffer handle;
+    // @brief Индекс типа памяти, используемый буфером (кеш).
+    u32 memory_index;
+    // @brief Требования к памяти для буфера (кеш).
+    VkMemoryRequirements memory_requirements;
+    // @brief Выделенная память устройства для буфера.
+    VkDeviceMemory memory;
+} vulkan_buffer;
+
 // @brief Котекст экземпляра изображения в Vulkan.
 typedef struct vulkan_image {
-    // @brief Внутренний объект изображения.
+    // @brief Указатель на изображение.
     VkImage handle;
     // @brief Вид изображения, используется для доступа к изображению.
     VkImageView view;
-    // @brief Память GPU изображения.
+    // @brief Память изображения (GPU сторона).
     VkDeviceMemory memory;
     // @brief Требования к памяти GPU.
     VkMemoryRequirements memory_requirements;
-    // @brief Флаги свойств памяти.
-    VkMemoryPropertyFlags memory_flags;
+    // @brief Флаги свойств памяти (кеш).
+    VkMemoryPropertyFlags memory_property_flags;
     // @brief Ширина изображения.
     u32 width;
     // @brief Высота изображения.
@@ -43,17 +79,17 @@ typedef struct vulkan_swapchain {
     VkImage* images;
     // @brief Представления изображений (используется darray).
     VkImageView* image_views;
-    // @brief
+    // @brief Формат буфера глубины.
     VkFormat depth_format;
-    // @brief
+    // @brief Количество каналов буфера глубины.
     u8 depth_channel_count;
-    // @brief
+    // @brief Буфер глубины (один для всех изображений, кадров).
     vulkan_image depth_image;
-    // @brief
+    // @brief Индекс текущего изображения.
     u32 image_index;
-    // @brief Номер текущего виртуального кадра для полечения и рендера.
+    // @brief Номер текущего кадра.
     u32 current_frame;
-    // @brief Количество виртуальных кадров (кадры доступные для получения, рендера и показа на экран).
+    // @brief Максимальное количество кадров (2 - двойная, 3 - тройная буферезация).
     u8 max_frames_in_flight;
 } vulkan_swapchain;
 
@@ -125,19 +161,30 @@ typedef struct vulkan_device {
     bool has_host_visible_local_memory;
 } vulkan_device;
 
+// TODO: Изменить с учетом других шейдеров.
+#define MAX_SHADER_STAGES 2
+
+// @brief Представляет шейдер.
+typedef struct vulkan_shader {
+    // @brief Указатель на графический конвейер, содержащий компилированные шейдерные модули и другие функций.
+    VkPipeline pipeline;
+    // @brief Макет конвейера, описывающий размещение дескрипторных наборов и push-констант.
+    VkPipelineLayout pipeline_layout;
+} vulkan_shader;
+
 // @brief Основной контекст рендерера.
 typedef struct vulkan_context {
-    // @brief
+    // @brief Ширина окна, запланированная к применению (ожидающая обработки).
     u32 frame_pending_width;
-    // @brief
+    // @brief Высота окна, запланированная к применению (ожидающая обработки).
     u32 frame_pending_height;
-    // @brief
+    // @brief Версия ожидающих изменений размера. Увеличивается при каждом новом запросе на изменение размера.
     u32 frame_pending_generation;
-    // @brief
+    // @brief Текущая ширина окна, используемая для рендеринга.
     u32 frame_width;
-    // @brief
+    // @brief Текущая высота окна, используемая для рендеринга.
     u32 frame_height;
-    // @brief
+    // @brief Версия примененных изменений размера. Обновляется после успешного пересоздания цепочки обмена.
     u32 frame_generation;
 
     // @brief Экземпляр Vulkan (корневой объект Vulkan API).
@@ -160,15 +207,25 @@ typedef struct vulkan_context {
     // @brief Цепочка обмена для управления буферами представления.
     vulkan_swapchain swapchain;
 
-    // @brief Массив объектов синхронизации виртуальных кадров (указывает на готовые к рендеру кадры).
+    // @brief Массив объектов синхронизации указывающих на готовность выполнения операций с изображением (на кард).
     VkSemaphore* image_available_semaphores;
-    // @brief Массив объектов синхронизации виртуальных кадров (сигнализирует на показанные или пропущенные кадры).
+    // @brief Массив объектов синхронизации указывающих на готовность записи командного буфера (на кадр).
     VkFence* in_flight_fences;
-    // @brief Массив объектов синхронизации изображений цепочки обмена (указывает на готовые к показу кадры).
+    // @brief Массив объектов синхронизации указывающих на готовность представления изображения на экран (на изображение).
     VkSemaphore* image_complete_semaphores;
-    // @brief Список указателей объектов синхронизации изображений цепочки обмена (только указатели).
+    // @brief Массив указателей на объекты синхронизации ... (на изображение).
     VkFence* images_in_flight;
 
-    // @brief
+    // @brief Буферы команд для графических операций (на кадр).
     VkCommandBuffer* graphics_command_buffers;
+
+    // TODO: Временно!
+    vulkan_shader world_shader;
+
+    // TODO: Временно!
+    u64 vertex_buffer_offset;
+    vulkan_buffer vertex_buffer;
+    u64 index_buffer_offset;
+    vulkan_buffer index_buffer;
+
 } vulkan_context;

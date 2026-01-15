@@ -683,7 +683,7 @@
             return;
         }
 
-        mcopy(out_extensions, extensions, sizeof(extensions));
+        mcopy(out_extensions, extensions, sizeof(char*) * (*extension_count));
     }
 
     u32 xcb_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)

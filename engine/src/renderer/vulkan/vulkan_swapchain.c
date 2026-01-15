@@ -45,6 +45,14 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
     swapchain->image_format = surface_formats[0];
     for(u32 i = 0; i < surface_format_count; ++i)
     {
+        // TODO: ?
+        // VkFormatProperties format_props;
+        // vkGetPhysicalDeviceFormatProperties(context->device.physical_device, color_format, &format_props);
+        // if(!(format_props.optimalTilingFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)) {
+        //     LOG_ERROR("Color format not supported for rendering");
+        //     return false;
+        // }
+
         VkSurfaceFormatKHR surface_format = surface_formats[i];
         if(surface_format.format == VK_FORMAT_B8G8R8A8_UNORM && surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
         {
@@ -224,14 +232,14 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
         }
     }
 
-    // Количество виртуальных кадров, которые могут находиться в презентации, так же указывает
-    // количество объектов синхронизации цепочки обмена (обычно 2-3).
-    // TODO: Должно учитывать количество кадров цепочки обмена.
+    // Количество изображений цепочки обмена которые могут находиться в обработке, так же известны как кадры (обычно 2-3).
+    // TODO: Должно учитывать количество кадров исходя из количества изображений цепочки обмена.
     swapchain->max_frames_in_flight = 2;
 
-    // Установка на первый виртуальный кадр.
+    // Установка текущего кадр.
     swapchain->current_frame = 0;
 
+    // TODO: Неправильное использование буфера глубины!!! Должно быть по одному на кард в обработке!!!!
     static const char* depth_format_strings[] = {
         "VK_FORMAT_D32_SFLOAT",
         "VK_FORMAT_D32_SFLOAT_S8_UINT",
@@ -295,6 +303,11 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
 
 static void swapchain_destroy(vulkan_context* context, vulkan_swapchain* swapchain)
 {
+    // NOTE: См. https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html
+    //       vkDeviceWaitIdle или vkQueueWaitIdle не может гарантировать безопасность удаления ресурсов swapchain.
+    // TODO: Рассмотреть использование расширения VK_EXT_swapchain_maintenance1 для решения проблемы vkQueuePresentKHR
+    //       и vkDeviceWaitIdle (vkQueueWaitIdle) при уничтожении swapchain.
+
     vulkan_image_destroy(context, &swapchain->depth_image);
 
     if(swapchain->image_views)
@@ -327,6 +340,12 @@ bool vulkan_swapchain_create(vulkan_context* context, u32 width, u32 height, vul
 
 void vulkan_swapchain_destroy(vulkan_context* context, vulkan_swapchain* swapchain)
 {
+    if(swapchain == nullptr || swapchain->handle == nullptr)
+    {
+        LOG_WARN("Some resources were not allocated, skipping...");
+        return;
+    }
+
     swapchain_destroy(context, swapchain);
 }
 

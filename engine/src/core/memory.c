@@ -101,7 +101,7 @@ const char* memory_system_usage_str()
 
     // Буфер для вывода информации о памяти.
     char buffer[8000] = "Memory information:\n\n";
-    const u16 buffer_length = sizeof(buffer);
+    const u16 buffer_length = sizeof(buffer); // TODO: При изменнении смещения, нужно менять и длинну!
     u64 offset = string_length(buffer);
 
     //-----------------------------------------------------------------------------------------------------------------------
@@ -122,6 +122,14 @@ const char* memory_system_usage_str()
 
     // Запись пикового использования памяти.
     length = string_format(buffer + offset, buffer_length, "Peak memory usgae: %.2f %s\n", peak.amount, peak.unit);
+
+    // Обновление смещения для записи следующей строки.
+    offset += length;
+
+    //-----------------------------------------------------------------------------------------------------------------------
+
+    // Вывод количества текущих аллокаций, для наблюдения за утечками памяти при работе приложения.
+    length = string_format(buffer + offset, buffer_length, "Current memory allocations: %u\n", context->stats.allocation_count);
 
     // Обновление смещения для записи следующей строки.
     offset += length;

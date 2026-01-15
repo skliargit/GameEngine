@@ -1,5 +1,7 @@
 # Написание игрового движка на C
 
+![Test application](/images/20260115-195812.png?raw=true "Test application")
+
 ## Содержание
 1. [Скачивание проекта](#download)
 2. [Сборка на Arch Linux](#archlinux)

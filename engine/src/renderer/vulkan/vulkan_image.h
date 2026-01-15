@@ -6,7 +6,7 @@
 /**/
 bool vulkan_image_create(
     vulkan_context* context, u32 width, u32 height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-    VkMemoryPropertyFlags memory_flags, vulkan_image* out_image
+    VkMemoryPropertyFlags memory_property_flags, vulkan_image* out_image
 );
 
 /**/

@@ -1,27 +1,13 @@
 #include "renderer/vulkan/vulkan_image.h"
 #include "renderer/vulkan/vulkan_result.h"
+#include "renderer/vulkan/vulkan_utils.h"
 
 #include "core/logger.h"
 #include "core/memory.h"
 
-static u32 memory_find_index(vulkan_device* device, u32 type_filter, VkMemoryPropertyFlags property_flags)
-{
-    for(u32 i = 0; i < device->memory_properties.memoryTypeCount; ++i)
-    {
-        // Проверка каждого типа памяти на наличие запрашиваемых свойств.
-        VkMemoryPropertyFlags current_property_flags = device->memory_properties.memoryTypes[i].propertyFlags & property_flags;
-        if(type_filter & (1 << i) && current_property_flags == property_flags)
-        {
-            return i;
-        }
-    }
-
-    return INVALID_ID32;
-}
-
 bool vulkan_image_create(
     vulkan_context* context, u32 width, u32 height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage,
-    VkMemoryPropertyFlags memory_flags, vulkan_image* out_image
+    VkMemoryPropertyFlags memory_property_flags, vulkan_image* out_image
 )
 {
     // Обнуление памяти.
@@ -29,22 +15,24 @@ bool vulkan_image_create(
 
     out_image->width = width;
     out_image->height = height;
-    out_image->memory_flags = memory_flags;
+    out_image->memory_property_flags = memory_property_flags;
 
+    // TODO: Указать индексы очередей для совместного использования изображения.
+    // NOTE: Изображение будет привязано к первому семейству очередей, которое его использует.
     VkImageCreateInfo image_info = {
         .sType         = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .flags         = 0,                         // TODO: Конфигурируемый.
-        .imageType     = VK_IMAGE_TYPE_2D,          // TODO: Конфигурируемый.
+        .flags         = 0,                         // TODO: Добавить конфигурацию флагов (например, для массивов изображений).
+        .imageType     = VK_IMAGE_TYPE_2D,          // TODO: Добавить поддержку других типов изображений (3D, 1D).
         .format        = format,
         .extent.width  = width,
         .extent.height = height,
-        .extent.depth  = 1,                         // TODO: Конфигурируемый.
-        .mipLevels     = 1,                         // TODO: Конфигурируемый.
-        .arrayLayers   = 1,                         // TODO: Конфигурируемый.
-        .samples       = VK_SAMPLE_COUNT_1_BIT,     // TODO: Конфигурируемый.
+        .extent.depth  = 1,                         // TODO: Добавить конфигурацию глубины для 3D изображений.
+        .mipLevels     = 1,                         // TODO: Добавить поддержку мипмаппинга.
+        .arrayLayers   = 1,                         // TODO: Добавить поддержку массивов изображений.
+        .samples       = VK_SAMPLE_COUNT_1_BIT,     // TODO: Добавить поддержку мультисэмплинга.
         .tiling        = tiling,
         .usage         = usage,
-        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE, // TODO: Конфигурируемый + queues.
+        .sharingMode   = VK_SHARING_MODE_EXCLUSIVE, // TODO: Добавить поддержку совместного использования между семействами очередей.
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
     };
 
@@ -58,7 +46,7 @@ bool vulkan_image_create(
     // Получение требований к памяти.
     vkGetImageMemoryRequirements(context->device.logical, out_image->handle, &out_image->memory_requirements);
 
-    u32 memory_index = memory_find_index(&context->device, out_image->memory_requirements.memoryTypeBits, memory_flags);
+    u32 memory_index = vulkan_util_find_memory_index(&context->device, out_image->memory_requirements.memoryTypeBits, memory_property_flags);
     if(memory_index == INVALID_ID32)
     {
         LOG_ERROR("Failed to find memory index for image.");
