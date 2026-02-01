@@ -73,7 +73,7 @@ typedef struct application_frame_stats {
     // @brief Общее время выполнения кадра в секундах.
     f64 frame_time;
     // @brief Планируемое время сна для соблюдения target_fps в секундах.
-    f64 sleep_time;
+    f64 sleep_expected_time;
     // @brief Реальное время сна в секундах.
     f64 sleep_actual_time;
     // @brief Ошибка планирования сна в секундах (+ пересып / - недосып).

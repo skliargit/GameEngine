@@ -7,12 +7,13 @@
 #include "renderer/vulkan/vulkan_shader.h"
 #include "renderer/vulkan/vulkan_buffer.h"
 
+#include "debug/assert.h"
 #include "core/logger.h"
 #include "core/memory.h"
 #include "core/string.h"
 #include "core/containers/darray.h"
-#include "math/math_types.h"
-#include "debug/assert.h"
+#include "math/types.h"
+#include "math/matrix.h"
 
 static vulkan_context* context = nullptr;
 
@@ -685,18 +686,32 @@ bool vulkan_backend_initialize(platform_window* window)
 
     // TODO: Временно!
     vertex3d verts[] = {
-        { {{ -0.5, -0.5,  1.0 }}, {{ 1.0, 0.0, 0.0, 1.0 }} },
-        { {{  0.0,  0.5,  0.0 }}, {{ 0.0, 1.0, 0.0, 1.0 }} },
-        { {{  0.5, -0.5,  1.0 }}, {{ 0.0, 0.0, 1.0, 1.0 }} },
-        { {{ -0.5,  0.5,  1.0 }}, {{ 0.1, 0.1, 0.1, 1.0 }} },
-        { {{  0.5,  0.5,  1.0 }}, {{ 0.1, 0.1, 0.1, 1.0 }} },
-        { {{  0.0, -0.5,  0.5 }}, {{ 1.0, 1.0, 1.0, 0.05 }} },
+        { {{ -0.5, -0.5, 0.0 }}, {{ 1.0, 0.0, 0.0, 1.0 }} }, // 0
+        { {{  0.5,  0.5, 0.0 }}, {{ 0.0, 1.0, 0.0, 1.0 }} }, // 1
+        { {{ -0.5,  0.5, 0.0 }}, {{ 0.0, 0.0, 1.0, 1.0 }} }, // 2
+        { {{  0.5, -0.5, 0.0 }}, {{ 1.0, 1.0, 0.0, 1.0 }} }, // 3
     };
     if(!vulkan_buffer_load_data(context, &context->vertex_buffer, 0, sizeof(verts), verts))
     {
         LOG_ERROR("Failed to load verts data.");
         return false;
     }
+
+    u32 indices[] = {0, 1, 2, 0, 3, 1};
+    if(!vulkan_buffer_load_data(context, &context->index_buffer, 0, sizeof(indices), indices))
+    {
+        LOG_ERROR("Failed to load indices data.");
+        return false;
+    }
+
+    // TODO: Временно!
+    const f32 fov = math_deg_to_rad(60);
+    const f32 aspect = (f32)context->frame_width / context->frame_height;
+    context->camera.proj = mat4_perspective(fov, aspect, 0.1f, 1000.0f);
+
+    // NOTE: Это не позиция самой камеры, а дополнительное смещение всех вершин мира,
+    //       что можно трактовать как перемещение камеры от центра мира.
+    context->camera.view = mat4_translation(vec3_forward());
 
     LOG_TRACE("Vulkan backend initialized successfully.");
     return true;
@@ -819,6 +834,10 @@ void vulkan_backend_resize(const u32 width, const u32 height)
     context->frame_pending_height = height;
     context->frame_pending_generation++;
     LOG_TRACE("Vulkan resize event to %ux%u, generation: %u.", width, height, context->frame_pending_generation);
+
+    // TODO: Временно для камеры!
+    const f32 aspect = (f32)width / height;
+    mat4_perspective_update_aspect(&context->camera.proj, aspect);
 }
 
 bool vulkan_backend_frame_begin()
@@ -936,7 +955,7 @@ bool vulkan_backend_frame_begin()
         depth_barrier
     };
 
-    const u32 image_barrier_count = sizeof(image_barriers) / sizeof(VkImageMemoryBarrier);
+    const u32 image_barrier_count = ARRAY_SIZE(image_barriers);
 
     // NOTE: Перед рендерингом в изображение swapchain'а и выполнения теста глубины нужно перевести их в правильные
     //       layout'ы. Для изображения цепиочки обмена и буфера глубины записывается команда барьера памяти, которая
@@ -1011,13 +1030,19 @@ bool vulkan_backend_frame_begin()
     vkCmdSetViewport(cmdbuf, 0, 1, &viewport);
     vkCmdSetScissor(cmdbuf, 0, 1, &scissor);
 
-    // Привязка конвейера.
+    // Использование конвейера.
     vulkan_shader_use(context, &context->world_shader);
 
-    // Привязка и рисование буфера.
+    // Обновление данных камеры и применение их.
+    vulkan_shader_update_camera(context, &context->world_shader, &context->camera);
+
+    // Использование буферов для рисования.
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(cmdbuf, 0, 1, &context->vertex_buffer.handle, &offset);
-    vkCmdDraw(cmdbuf, 6, 1, 0, 0);
+    vkCmdBindIndexBuffer(cmdbuf, context->index_buffer.handle, offset, VK_INDEX_TYPE_UINT32);
+
+    // vkCmdDraw(cmdbuf, 6, 1, 0, 0);
+    vkCmdDrawIndexed(cmdbuf, 6, 1, 0, 0, 0);
 
     // TODO: Временно. Завершение.
 

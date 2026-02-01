@@ -1,7 +1,7 @@
 #pragma once
 
 #include <core/defines.h>
-#include <renderer/renderer_types.h>
+#include <renderer/types.h>
 
 /**/
 bool renderer_initialize(renderer_config* config);

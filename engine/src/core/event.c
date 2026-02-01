@@ -194,7 +194,7 @@ API const char* event_code_to_str(event_code code)
         [EVENT_CODE_MOUSE_WHEEL        ] = "MOUSE WHEEL",
     };
 
-    static const u32 code_count = sizeof(strings) / sizeof(char*);
+    static const u32 code_count = ARRAY_SIZE(strings);
 
     if((u32)code > code_count || strings[code] == nullptr)
     {

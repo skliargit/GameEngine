@@ -129,7 +129,7 @@ const char* memory_system_usage_str()
     //-----------------------------------------------------------------------------------------------------------------------
 
     // Вывод количества текущих аллокаций, для наблюдения за утечками памяти при работе приложения.
-    length = string_format(buffer + offset, buffer_length, "Current memory allocations: %u\n", context->stats.allocation_count);
+    length = string_format(buffer + offset, buffer_length, "Current memory allocations: %llu\n", context->stats.allocation_count);
 
     // Обновление смещения для записи следующей строки.
     offset += length;
@@ -207,24 +207,24 @@ void memory_free(void* block, u64 size, memory_tag tag)
 
 void memory_get_format(u64 size, memory_format* out_format)
 {
-    if(size < 1 KiB)
+    if(size < KIBIBYTES(1))
     {
         out_format->unit = "B";
         out_format->amount = (f32)size;
     }
-    else if(size < 1 MiB)
+    else if(size < MEBIBYTES(1))
     {
         out_format->unit = "KiB";
-        out_format->amount = (f32)size / (1 KiB);
+        out_format->amount = (f32)size / KIBIBYTES(1);
     }
-    else if(size < 1 GiB)
+    else if(size < GIBIBYTES(1))
     {
         out_format->unit = "MiB";
-        out_format->amount = (f32)size / (1 MiB);
+        out_format->amount = (f32)size / MEBIBYTES(1);
     }
     else
     {
         out_format->unit = "GiB";
-        out_format->amount = (f32)size / (1 GiB);
+        out_format->amount = (f32)size / GIBIBYTES(1);
     }
 }

@@ -2,6 +2,7 @@
 
 #include <core/defines.h>
 #include <vulkan/vulkan.h>
+#include <renderer/types.h>
 
 typedef struct platform_window platform_window;
 
@@ -89,7 +90,7 @@ typedef struct vulkan_swapchain {
     u32 image_index;
     // @brief Номер текущего кадра.
     u32 current_frame;
-    // @brief Максимальное количество кадров (2 - двойная, 3 - тройная буферезация).
+    // @brief Максимальное количество кадров (2 - двойная, 3 - тройная буферезация, а больше и не потребуется!).
     u8 max_frames_in_flight;
 } vulkan_swapchain;
 
@@ -158,7 +159,7 @@ typedef struct vulkan_device {
     // @brief Характеристики памяти устройства (типы памяти, размеры и т.д.).
     VkPhysicalDeviceMemoryProperties memory_properties;
     // @brief Флаг поддержки host-visible памяти с локальным доступом от устройства.
-    bool has_host_visible_local_memory;
+    bool supports_host_local_memory;
 } vulkan_device;
 
 // TODO: Изменить с учетом других шейдеров.
@@ -166,10 +167,18 @@ typedef struct vulkan_device {
 
 // @brief Представляет шейдер.
 typedef struct vulkan_shader {
-    // @brief Указатель на графический конвейер, содержащий компилированные шейдерные модули и другие функций.
-    VkPipeline pipeline;
+    // @brief Макет дескрипторных наборов.
+    VkDescriptorSetLayout descriptor_set_layout;
     // @brief Макет конвейера, описывающий размещение дескрипторных наборов и push-констант.
     VkPipelineLayout pipeline_layout;
+    // @brief Указатель на графический конвейер, содержащий компилированные шейдерные модули и другие функций.
+    VkPipeline pipeline;
+    // @brief Пул дескрипторов.
+    VkDescriptorPool descriptor_pool;
+    // @brief Массив дескрипторных наборов (на кадр). Зарезервировано 3, т.к. кол-во кадров в обработке 2-3 (см. max_frames_in_flight).
+    VkDescriptorSet descriptor_sets[3];
+    // @brief Буфер uniform переменных.
+    vulkan_buffer uniform_buffer;
 } vulkan_shader;
 
 // @brief Основной контекст рендерера.
@@ -227,5 +236,8 @@ typedef struct vulkan_context {
     vulkan_buffer vertex_buffer;
     u64 index_buffer_offset;
     vulkan_buffer index_buffer;
+
+    // TODO: Временно!
+    renderer_camera camera;
 
 } vulkan_context;

@@ -172,7 +172,7 @@
         // TODO: POLLERR - Указывает на возникновение ошибки на файловом дескрипторе.
         //       POLLHUP - Указывает, что соединение "повисло".
         client->poll_fd[0].events = POLLIN; //| POLLERR | POLLHUP;
-        client->poll_fd_count = sizeof(client->poll_fd) / sizeof(struct pollfd);
+        client->poll_fd_count = ARRAY_SIZE(client->poll_fd);
 
         // Получение registry для обнаружения глобальных объектов.
         client->registry = wl_display_get_registry(client->display);
@@ -425,7 +425,7 @@
 
         if(out_extensions == nullptr)
         {
-            *extension_count = sizeof(extensions) / sizeof(char*);
+            *extension_count = ARRAY_SIZE(extensions);
             return;
         }
 

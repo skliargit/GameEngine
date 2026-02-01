@@ -16,7 +16,7 @@ typedef union {
             f32 y, t, v, im;
         };
     };
-} vec2f;
+} vec2;
 
 // @brief Вектор из 3х элементов c плавающей точкой.
 typedef union {
@@ -36,7 +36,7 @@ typedef union {
             f32 z, b, w, l, k;
         };
     };
-} vec3f;
+} vec3;
 
 // @brief Вектор из 4х элементов c плавающей точкой.
 typedef union {
@@ -60,24 +60,36 @@ typedef union {
             f32 w, a, q, height;
         };
     };
-} vec4f;
+} vec4;
+
+/*
+    @brief Кватернион вращения (w, x, y, z), где w - скалярная часть, (x, y, z) - векторная часть.
+    @note Используется для интерполяции вращений (slerp), избегания Gimbal Lock.
+*/
+typedef vec4 quat;
+
+// @brief Матрица 4х4 из элементов с плавающей точкой.
+typedef union {
+    // @brief Массив из 16ти элементов с плавающей точкой.
+    f32 data[16];
+} mat4;
 
 // @brief Представляет вершину в двухмерном пространстве.
 typedef struct {
     // @brief Пространственные координаты.
-    vec2f position;
+    vec2 position;
     // @brief Текстурные координаты.
-    vec2f texcoord;
+    vec2 texcoord;
     // @brief Цвет RGBA.
-    vec4f color;
+    vec4 color;
 } vertex2d;
 
 // @brief Представляет вершину в трехмерном пространстве.
 typedef struct {
     // @brief Пространственные координаты.
-    vec3f position;
+    vec3 position;
     // @brief Текстурные координаты.
     // vec2f texcoord;
     // @brief Цвет RGBA.
-    vec4f color;
+    vec4 color;
 } vertex3d;

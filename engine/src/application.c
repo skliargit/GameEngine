@@ -9,7 +9,7 @@
 #include "debug/assert.h"
 #include "platform/console.h"
 #include "platform/memory.h"
-#include "platform/systimer.h"
+#include "platform/time.h"
 #include "platform/thread.h"
 #include "platform/window.h"
 #include "renderer/renderer.h"
@@ -121,13 +121,13 @@ bool application_initialize(const application_config* config)
     }
     LOG_INFO("Memory subsystem initialized successfully.");
 
-    if(!platform_systimer_initialize())
+    if(!platform_time_initialize())
     {
-        LOG_ERROR("Failed to initialize platform timer subsystem. Unable to continue.");
+        LOG_ERROR("Failed to initialize platform time subsystem. Unable to continue.");
         application_terminate();
         return false;
     }
-    LOG_INFO("Timer subsystem initialized successfully.");
+    LOG_INFO("Time subsystem initialized successfully.");
 
     if(!platform_thread_initialize())
     {
@@ -255,30 +255,19 @@ bool application_run()
     context->is_running = true;
     context->is_suspended = false;
 
-    // Тайминги управления кадром.
-    timer frame_timer, game_timer;
-    timer_init(&frame_timer);
-    timer_init(&game_timer);
-
-    // Запуск таймеров.
+    // Тайминги управления кадром и сбором статистики.
+    timer frame_timer, physic_timer, stats_timer;
     timer_start(&frame_timer);
-    timer_start(&game_timer);
+    timer_start(&physic_timer);
 
     application_frame_stats frame_stats = {0};
-    f64 frame_time_accumulator = 0.0;
-    u64 frame_count = 0;
+    f32 frame_time_accumulator = 0.0;
+    // f32 physic_time_accumulator = 0.0;
+    u16 frame_count = 0;
 
     while(context->is_running)
     {
-        timer_restart(&frame_timer);
-
-        // Пересчет и обновление статистики предыдущего кадра.
-        frame_stats.render_time -= frame_stats.update_time;
-        frame_stats.update_time -= frame_stats.window_time;
-        context->frame_stats = frame_stats;
-
-        // Обновление состояния ввода.
-        input_system_update();
+        timer_reset(&stats_timer);
 
         if(!platform_window_poll_events())
         {
@@ -288,12 +277,10 @@ bool application_run()
         }
 
         // Время от начала кадра: обработки пользовательского ввода, и др. событий окна.
-        frame_stats.window_time = timer_elapsed(&frame_timer);
+        frame_stats.window_time = timer_delta(&stats_timer);
 
         // Обновление игрового времени (всегда).
-        // TODO: Ограничение!
-        f32 delta_time = (f32)timer_elapsed(&game_timer);
-        timer_restart(&game_timer);
+        f32 delta_time = CAST_F32(timer_delta(&physic_timer));
 
         // Сбор статистики FPS.
         frame_count++;
@@ -309,6 +296,7 @@ bool application_run()
 
         if(!context->is_suspended)
         {
+            // TODO: Fixed Timestep для плавности + интерполяция шага.
             if(!context->update(delta_time))
             {
                 LOG_ERROR("Update of user application failed. Shutting down.");
@@ -317,7 +305,7 @@ bool application_run()
             }
 
             // Время от начала кадра: обработки обновления логики приложения.
-            frame_stats.update_time = timer_elapsed(&frame_timer);
+            frame_stats.update_time = timer_delta(&stats_timer);
 
             if(!context->render(delta_time))
             {
@@ -330,26 +318,34 @@ bool application_run()
             renderer_draw();
 
             // Время от начала кадра: отрисовка буфера.
-            frame_stats.render_time = timer_elapsed(&frame_timer);
+            frame_stats.render_time = timer_delta(&stats_timer);
         }
 
         // Время от начала кадра и расчет времени сна с поправкой на ошибку.
-        frame_stats.frame_time = timer_elapsed(&frame_timer);
-        frame_stats.sleep_time = context->target_frame_time - frame_stats.frame_time - frame_stats.sleep_error_time;
-        frame_stats.sleep_error_time = 0.0;
+        // NOTE: Если время кадра превысило заданное, то начало нового кадра после этой команды!
+        frame_stats.frame_time = timer_delta(&frame_timer);
+        frame_stats.sleep_expected_time = context->target_frame_time - frame_stats.frame_time - frame_stats.sleep_error_time;
+        frame_stats.sleep_error_time = 0.0; // NOTE: Обнуляется для случая пропуска сна!
 
-        if(frame_stats.sleep_time >= 0.001)
+        if(frame_stats.sleep_expected_time >= 0.001)
         {
             // Возвращение управления операционной система, время сна.
-            platform_thread_sleep((u32)(frame_stats.sleep_time * 1000.0));
+            platform_thread_sleep(CAST_U32(frame_stats.sleep_expected_time * 1000.0));
 
             // Вычисление ошибки c ограничением в разумных пределах.
-            frame_stats.sleep_actual_time = timer_elapsed(&frame_timer) - frame_stats.frame_time;
-            frame_stats.sleep_error_time = frame_stats.sleep_actual_time - frame_stats.sleep_time;
-            frame_stats.sleep_error_time = CLAMP(
-                frame_stats.sleep_error_time, -context->target_frame_time * 0.5, context->target_frame_time * 0.5
-            );
+            // NOTE: Если время кадра не превысило заданное, то начало нового кадра после этой команды!
+            frame_stats.sleep_actual_time = timer_delta(&frame_timer);
+
+            const f64 half_range_time = context->target_frame_time * 0.5;
+            frame_stats.sleep_error_time = frame_stats.sleep_actual_time - frame_stats.sleep_expected_time;
+            frame_stats.sleep_error_time = CLAMP(frame_stats.sleep_error_time, -half_range_time, half_range_time);
         }
+
+        // Обновление статистики предыдущего кадра.
+        context->frame_stats = frame_stats;
+
+        // Обновление состояния системы ввода.
+        input_system_update();
     }
 
     application_terminate();
@@ -365,6 +361,7 @@ void application_quit()
     }
 }
 
+// TODO: Переделать на exit()!
 void application_terminate()
 {
     if(context)
@@ -433,10 +430,10 @@ void application_terminate()
     }
 
     // Завершение подсистемы таймера.
-    if(platform_systimer_is_initialized())
+    if(platform_time_is_initialized())
     {
-        platform_systimer_shutdown();
-        LOG_INFO("Timer subsystem shutdown complete.");
+        platform_time_shutdown();
+        LOG_INFO("Time subsystem shutdown complete.");
     }
 
     // Завершение подсистемы памяти.

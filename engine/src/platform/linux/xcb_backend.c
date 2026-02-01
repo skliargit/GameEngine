@@ -287,7 +287,7 @@
             [0x01] = BTN_LEFT, [0x02] = BTN_MIDDLE, [0x03] = BTN_RIGHT, [0x08] = BTN_BACKWARD, [0x09] = BTN_FORWARD
         };
 
-        if(scancode >= (sizeof(codes)/sizeof(mouse_button)))
+        if(scancode >= ARRAY_SIZE(codes))
         {
             return BTN_UNKNOWN;
         }
@@ -679,7 +679,7 @@
 
         if(out_extensions == nullptr)
         {
-            *extension_count = sizeof(extensions) / sizeof(char*);
+            *extension_count = ARRAY_SIZE(extensions);
             return;
         }
 

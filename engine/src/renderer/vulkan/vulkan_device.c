@@ -85,6 +85,19 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
         return false;
     }
 
+    // Поддержка видимости памяти графического устройства.
+    for(u32 i = 0; i < physical->memory_properties.memoryTypeCount; ++i)
+    {
+        // Проветка каждого типа памяти на видимость.
+        if((physical->memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+        && (physical->memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+        {
+            out_device->supports_host_local_memory = true;
+            LOG_DEBUG("Vulkan physical device supports local memory mapping at the host level.");
+            break;
+        }
+    }
+
     // Выбрать семейств и индексов очередей.
     u32 family_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(physical->handle, &family_count, nullptr);
@@ -514,7 +527,7 @@ const char* vulkan_device_get_physical_device_type_str(VkPhysicalDeviceType type
         [VK_PHYSICAL_DEVICE_TYPE_CPU]            = "cpu"
     };
 
-    static const u32 type_name_count = sizeof(type_names) / sizeof(char*);
+    static const u32 type_name_count = ARRAY_SIZE(type_names);
 
     if((u32)type >= type_name_count)
     {

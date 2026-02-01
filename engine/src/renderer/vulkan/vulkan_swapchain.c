@@ -253,7 +253,7 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
         // { VK_FORMAT_D24_UNORM_S8_UINT,  3 },
     };
 
-    static const u32 depth_format_count = sizeof(depth_formats) / sizeof(depth_format);
+    static const u32 depth_format_count = ARRAY_SIZE(depth_formats);
     static const VkFormatFeatureFlags flags = VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
     u32 depth_format_index = INVALID_ID32;
@@ -415,5 +415,7 @@ void vulkan_swapchain_present(
         LOG_FATAL("Failed to present swapchain image!", __FUNCTION__);
     }
 
-    swapchain->current_frame = (swapchain->current_frame + 1) % swapchain->max_frames_in_flight;
+    // NOTE: Оптимальная версия, т.к. операция взятия остатка очень тяжелая!
+    swapchain->current_frame++;
+    swapchain->current_frame = swapchain->current_frame >= swapchain->max_frames_in_flight ? 0 : swapchain->current_frame;
 }

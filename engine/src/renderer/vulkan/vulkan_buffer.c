@@ -35,6 +35,7 @@ static bool buffer_copy_range(vulkan_context* context, VkBuffer src, u64 src_off
 {
     VkQueue queue = context->device.graphics_queue.handle;
 
+    // TODO: Использование семафора.
     // Ожидание завершения операций в очереди.
     VkResult result = vkQueueWaitIdle(queue);
     if(!vulkan_result_is_success(result))
@@ -88,6 +89,7 @@ static bool buffer_copy_range(vulkan_context* context, VkBuffer src, u64 src_off
         return false;
     }
 
+    // TODO: Встроить семафоры.
     // Отправка на выполнение временного буфера команд.
     VkSubmitInfo cmdbuf_submit_info = {
         .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -143,6 +145,10 @@ bool vulkan_buffer_create(vulkan_context* context, vulkan_buffer_type type, u64 
             out_buffer->memory_property_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
             break;
         case VULKAN_BUFFER_TYPE_UNIFORM:
+            out_buffer->usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            out_buffer->memory_property_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            out_buffer->memory_property_flags |= context->device.supports_host_local_memory ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT : 0;
+            break;
         case VULKAN_BUFFER_TYPE_READ:
         case VULKAN_BUFFER_TYPE_STORAGE:
         default:
@@ -189,7 +195,7 @@ bool vulkan_buffer_create(vulkan_context* context, vulkan_buffer_type type, u64 
         return false;
     }
 
-    // TODO: Выделять большой кусок и выполнять привязки к нему буферов.
+    // TODO: Выделять большой кусок и выполнять связывание с ним буферов.
     result = vkBindBufferMemory(context->device.logical, out_buffer->handle, out_buffer->memory, 0);
     if(!vulkan_result_is_success(result))
     {

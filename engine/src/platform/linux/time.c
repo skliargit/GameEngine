@@ -2,14 +2,58 @@
 
 #ifdef PLATFORM_LINUX_FLAG
 
-    #include <time.h>
-
     // Для потокобезопасных версий.
     #define _POSIX_C_SOURCE 200809L
+
+    #include "debug/assert.h"
+    #include <time.h>
+
+    static bool initialized = false;
+
+    bool platform_time_initialize()
+    {
+        ASSERT(initialized == false, "Time subsystem is already initialized.");
+
+        initialized = true;
+        return true;
+    }
+
+    void platform_time_shutdown()
+    {
+        initialized = false;
+    }
+
+    bool platform_time_is_initialized()
+    {
+        return initialized;
+    }
 
     u64 platform_time_now()
     {
         return (u64)time(nullptr);
+    }
+
+    u64 platform_time_seed(void)
+    {
+        ASSERT(initialized == true, "Time subsystem not initialized. Call platform_time_initialize() first.");
+
+        // TODO: Добавить энтропии на основе PID процесса и адреса стека.
+        // seed ^= (u64)getpid() << 32
+        // seed ^= (u64)((usize)&stack);
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        return (u64)ts.tv_sec * 1000000000ULL + (u64)ts.tv_nsec;
+    }
+
+    f64 platform_time_uptime()
+    {
+        ASSERT(initialized == true, "Time subsystem not initialized. Call platform_time_initialize() first.");
+
+        struct timespec now;
+        // NOTE: CLOCK_MONOTONIC_RAW игнорирует любые корректировки NTP и adjtime(), отражая "сырое" аппаратное время.
+        //       Это делает его независимым от внешних влияний на системные часы.
+        clock_gettime(CLOCK_MONOTONIC_RAW, &now);
+        return (f64)now.tv_sec + (f64)now.tv_nsec * 0.000000001;
     }
 
     platform_datetime platform_time_to_local(u64 time_sec)

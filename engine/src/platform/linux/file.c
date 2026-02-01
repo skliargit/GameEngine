@@ -124,11 +124,11 @@
         u64 length = strlen(buffer);
         if(length > 0)
         {
-            // Удаление символа переноса на новую строку.
-            if(buffer[length - 1] == '\n') --length;
-
             // Удаление символа возврата коретки для Windows файлов.
             if(buffer[length - 1] == '\r') --length;
+
+            // Удаление символа переноса на новую строку.
+            if(buffer[length - 1] == '\n') --length;
 
             // Вставка нулевого символа в конец.
             buffer[length] = '\0';

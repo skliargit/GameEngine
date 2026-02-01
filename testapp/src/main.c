@@ -71,21 +71,89 @@ static bool game_update(f32 delta_time)
     {
         application_frame_stats stats = application_get_frame_stats();
 
-        timer_format window_ft, update_ft, render_ft, frame_ft, sleep_ft, sleep_actual_ft, sleep_error_ft;
-        timer_get_format(stats.window_time, &window_ft);
-        timer_get_format(stats.update_time, &update_ft);
-        timer_get_format(stats.render_time, &render_ft);
-        timer_get_format(stats.frame_time, &frame_ft);
-        timer_get_format(stats.sleep_time, &sleep_ft);
-        timer_get_format(stats.sleep_actual_time, &sleep_actual_ft);
-        timer_get_format(stats.sleep_error_time, &sleep_error_ft);
+        char buffer[4000] = "\n\nFrame timings:";
 
-        LOG_DEBUG(
-            "Frame stats:\n\nWindow time %.2f%s\nUpdate time: %.2f%s\nRender time %.2f%s\nFrame time %.2f%s\nSleep time %.2f%s\nReally sleep time %.2f%s\nError sleep time %.2f%s\nCurrent FPS %hu\n",
-            window_ft.amount, window_ft.unit, update_ft.amount, update_ft.unit, render_ft.amount, render_ft.unit,
-            frame_ft.amount, frame_ft.unit, sleep_ft.amount, sleep_ft.unit, sleep_actual_ft.amount, sleep_actual_ft.unit,
-            sleep_error_ft.amount, sleep_error_ft.unit, stats.fps
-        );
+        u32 msg_length = string_length(buffer);
+        u32 buf_offset = msg_length;
+        u32 buf_length = ARRAY_SIZE(buffer) - msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        timer_format total_tf, delta_tf;
+        timer_get_format(stats.frame_time + stats.sleep_actual_time, &total_tf);
+        timer_get_format(delta_time, &delta_tf); // TODO: Взять дельту предыдущего кадра!
+
+        msg_length = string_format(buffer + buf_offset, buf_length, " (total %.2f%s, delta %.2f%s, FPS %hu)\n",
+                                   total_tf.amount, total_tf.unit, delta_tf.amount, delta_tf.unit, stats.fps);
+        buf_offset += msg_length;
+        buf_length -= msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        timer_format window_tf;
+        timer_get_format(stats.window_time, &window_tf);
+
+        msg_length = string_format(buffer + buf_offset, buf_length, "  Window events  : %.2f%s\n", window_tf.amount, window_tf.unit);
+        buf_offset += msg_length;
+        buf_length -= msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        timer_format update_tf;
+        timer_get_format(stats.update_time, &update_tf);
+
+        msg_length = string_format(buffer + buf_offset, buf_length, "  Physics update : %.2f%s\n", update_tf.amount, update_tf.unit);
+        buf_offset += msg_length;
+        buf_length -= msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        timer_format render_tf;
+        timer_get_format(stats.render_time, &render_tf);
+
+        msg_length = string_format(buffer + buf_offset, buf_length, "  Renderer draw  : %.2f%s\n", render_tf.amount, render_tf.unit);
+        buf_offset += msg_length;
+        buf_length -= msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        timer_format frame_tf;
+        timer_get_format(stats.frame_time, &frame_tf);
+
+        msg_length = string_format(buffer + buf_offset, buf_length, "  Frame actual   : %.2f%s\n", frame_tf.amount, frame_tf.unit);
+        buf_offset += msg_length;
+        buf_length -= msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        timer_format sleep_expected_tf;
+        timer_get_format(stats.sleep_expected_time, &sleep_expected_tf);
+
+        msg_length = string_format(buffer + buf_offset, buf_length, "  Sleep expected : %.2f%s\n", sleep_expected_tf.amount, sleep_expected_tf.unit);
+        buf_offset += msg_length;
+        buf_length -= msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        timer_format sleep_actual_tf;
+        timer_get_format(stats.sleep_actual_time, &sleep_actual_tf);
+
+        msg_length = string_format(buffer + buf_offset, buf_length, "  Sleep actual   : %.2f%s\n", sleep_actual_tf.amount, sleep_actual_tf.unit);
+        buf_offset += msg_length;
+        buf_length -= msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        timer_format sleep_error_tf;
+        timer_get_format(stats.sleep_error_time, &sleep_error_tf);
+
+        msg_length = string_format(buffer + buf_offset, buf_length, "  Sleep error    : %.2f%s\n", sleep_error_tf.amount, sleep_error_tf.unit);
+        buf_offset += msg_length;
+        buf_length -= msg_length;
+
+        //---------------------------------------------------------------------------------------------------------------------
+
+        LOG_DEBUG(buffer);
     }
     else if(input_key_down('M'))
     {

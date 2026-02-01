@@ -2,11 +2,52 @@
 
 #ifdef PLATFORM_WINDOWS_FLAG
 
+    #include "debug/assert.h"
+    #include "core/logger.h"
     #include <windows.h>
     #include <time.h>
 
     // Для преобразования к unix времени.
     #define SECONDS_FROM_1601_TO_1970 11644473600ULL
+
+    // Необходимо для таймера высокого разрешения.
+    static LARGE_INTEGER start = {0};
+    static LARGE_INTEGER freq  = {0};
+    static bool initialized    = false;
+
+    bool platform_time_initialize()
+    {
+        ASSERT(initialized == false, "Time subsystem is already initialized.");
+
+        if(!QueryPerformanceFrequency(&freq))
+        {
+            LOG_ERROR("Windows high-resolution timer (QPC) is not available.");
+            return false;
+        }
+
+        if(!QueryPerformanceCounter(&start))
+        {
+            LOG_ERROR("Windows high-resolution timer (QPC) failed to initialize.");
+            return false;
+        }
+
+        LOG_TRACE("Windows high-resolution timer (QPC) initialized with frequency: %llu Hz.", freq.QuadPart);
+
+        initialized = true;
+        return true;
+    }
+
+    void platform_time_shutdown()
+    {
+        start.QuadPart = 0;
+        freq.QuadPart = 0;
+        initialized = false;
+    }
+
+    bool platform_time_is_initialized()
+    {
+        return initialized;
+    }
 
     u64 platform_time_now()
     {
@@ -19,6 +60,25 @@
 
         // Конвертация из 100-наносекундных интервалов с 1601 в секунды с 1970.
         return uli.QuadPart / 10000000ULL - SECONDS_FROM_1601_TO_1970;
+    }
+
+    u64 platform_time_seed(void)
+    {
+        // TODO: Добавить энтропии на основе PID процесса и адреса стека.
+        // seed ^= (u64)getpid() << 32
+        // seed ^= (u64)((usize)&stack);
+        LARGE_INTEGER counter;
+        QueryPerformanceCounter(&counter);
+        return counter.QuadPart;
+    }
+
+    f64 platform_time_uptime()
+    {
+        ASSERT(initialized == true, "Time subsystem not initialized. Call platform_time_initialize() first.");
+
+        LARGE_INTEGER now;
+        QueryPerformanceCounter(&now);
+        return (f64)(now.QuadPart - start.QuadPart) / (f64)freq.QuadPart;
     }
 
     platform_datetime platform_time_to_local(u64 time_sec)

@@ -11,3 +11,6 @@ void vulkan_shader_destroy(vulkan_context* context, vulkan_shader* shader);
 
 /**/
 void vulkan_shader_use(vulkan_context* context, vulkan_shader* shader);
+
+/**/
+void vulkan_shader_update_camera(vulkan_context* context, vulkan_shader* shader, renderer_camera* camera);

@@ -3,8 +3,9 @@
 #ifdef PLATFORM_LINUX_FLAG
 
     #include "debug/assert.h"
-    #include <errno.h>
+
     #include <time.h>
+    #include <asm-generic/errno-base.h>
 
     static bool initialized = false;
 
