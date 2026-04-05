@@ -72,7 +72,7 @@ u64  xcb_backend_memory_requirement();
     @param internal_data Указатель на внутренние данные бэкенда.
     @return Указатель на созданное окно или nullptr в случае ошибки.
 */
-platform_window* xcb_backend_window_create(const platform_window_config* config, void* internal_data);
+platform_window_t* xcb_window_create(const platform_window_config_t* config, void* internal_data);
 
 /*
     @brief Уничтожает окно, созданное через XCB бэкенд.
@@ -80,14 +80,14 @@ platform_window* xcb_backend_window_create(const platform_window_config* config,
     @param window Указатель на уничтожаемое окно.
     @param internal_data Указатель на внутренние данные бэкенда.
 */
-void xcb_backend_window_destroy(platform_window* window, void* internal_data);
+void xcb_window_destroy(platform_window_t* window, void* internal_data);
 
 /*
     @brief Получает текущий заголовок окна.
     @param window Указатель на контекст окна для получения заголовка.
     @return Указатель на строку с заголовком окна.
 */
-const char* xcb_backend_window_get_title(platform_window* window);
+const char* xcb_window_get_title(platform_window_t* window);
 
 /*
     @brief Получает размеры клиентской области окна в пикселях.
@@ -95,7 +95,32 @@ const char* xcb_backend_window_get_title(platform_window* window);
     @param width Указатель на переменную для сохранения ширина окна.
     @param height Указатель на переменную для сохранения высоты окна.
 */
-void xcb_backend_window_get_resolution(platform_window* window, u32* width, u32* height);
+void xcb_window_get_resolution(platform_window_t* window, u32* width, u32* height);
+
+/*
+    @brief Устанавливает функцию для обработки указанного события окна.
+    @param window Указатель на контекст окна для установки функции-обработчика.
+    @param event Тип события для подписки.
+    @param callback Функция-обработчик (может быть nullptr для удаления обработчика).
+    @param user_data Пользовательские данные, передаваемые в функцию-обработчик (может быть nullptr).
+*/
+void xcb_window_set_event_callback(platform_window_t* window, platform_window_event_t event, platform_window_event_callback callback, void* user_data);
+
+/*
+*/
+void xcb_window_hide_cursor(platform_window_t* window);
+
+/*
+*/
+void xcb_window_show_cursor(platform_window_t* window);
+
+/*
+*/
+void xcb_window_lock_cursor(platform_window_t* window);
+
+/*
+*/
+void xcb_window_unlock_cursor(platform_window_t* window);
 
 /*
     @brief Перечисляет расширения Vulkan, необходимые для создания поверхности окна на текущей платформе.
@@ -106,7 +131,7 @@ void xcb_backend_window_get_resolution(platform_window* window, u32* width, u32*
     @param out_extensions Указатель на массив строк, который будет заполнен именами расширений, или
            nullptr для получения количество расширений через extension_count.
 */
-void xcb_backend_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions);
+void xcb_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions);
 
 /*
     @brief Создает поверхность Vulkan для указанного окна.
@@ -117,7 +142,7 @@ void xcb_backend_enumerate_vulkan_extensions(u32* extension_count, const char** 
     @param out_vulkan_surface Указатель для получения созданной поверхности (VkSurfaceKHR).
     @return Код результата VK_SUCCESS при успехе (VkResult).
 */
-u32 xcb_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface);
+u32 xcb_window_create_vulkan_surface(platform_window_t* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface);
 
 /*
     @brief Уничтожает поверхность Vulkan для указанного окна.
@@ -127,7 +152,7 @@ u32 xcb_backend_create_vulkan_surface(platform_window* window, void* vulkan_inst
     @param vulkan_allocator Указатель на аллокатор Vulkan (VkAllocationCallbacks) или nullptr.
     @param vulkan_surface Поверхность Vulkan для уничтожения (VkSurfaceKHR).
 */
-void xcb_backend_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface);
+void xcb_window_destroy_vulkan_surface(platform_window_t* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface);
 
 /*
     @brief Проверяет поддержку представления Vulkan для конкретного устройства и семейства очередей.
@@ -137,4 +162,4 @@ void xcb_backend_destroy_vulkan_surface(platform_window* window, void* vulkan_in
     @param queue_family_index Индекс семейства очередей для проверки.
     @return VK_TRUE если представление поддерживается, VK_FALSE в противном случае (VkBool32).
 */
-u32 xcb_backend_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index);
+u32 xcb_window_supports_vulkan_presentation(platform_window_t* window, void* vulkan_pyhical_device, u32 queue_family_index);

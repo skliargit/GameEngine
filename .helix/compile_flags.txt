@@ -5,6 +5,6 @@
 -Wreturn-type
 -I../engine/src/
 -I../testapp/src/
--DLIB_EXPORT_FLAG
+-DMAKE_LIB_FLAG
 -DDEBUG_FLAG
 -DDEBUG_PLATFORM_FLAG

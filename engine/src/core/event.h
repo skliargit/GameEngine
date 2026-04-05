@@ -76,9 +76,16 @@ typedef enum event_code {
         @note Получение контекста:
                 context.i32[0] - позиция по X
                 context.i32[1] - позиция по Y
-        TODO: смещение? wayland?
     */
     EVENT_CODE_MOUSE_MOVE,
+
+    /*
+        @brief Событие движения мыши.
+        @note Получение контекста:
+                context.i32[0] - позиция по X
+                context.i32[1] - позиция по Y
+    */
+    EVENT_CODE_MOUSE_MOVE_RELATIVE,
 
     /*
         @brief Событие прокрутки колесиков мыши.
@@ -143,7 +150,7 @@ void event_system_shutdown();
     @brief Проверяет, была ли инициализирована система событий.
     @return true - система инициализирована и готова к работе, false - система не инициализирована.
 */
-API bool event_system_is_initialized();
+CORE_API bool event_system_is_initialized();
 
 /*
     @brief Регистрация обработчика события.
@@ -152,7 +159,7 @@ API bool event_system_is_initialized();
     @param handler Функция-обработчик события.
     @return true - успешная регистрация, false - ошибка.
 */
-API bool event_register(event_code code, void* listener, on_event_callback handler);
+CORE_API bool event_register(event_code code, void* listener, on_event_callback handler);
 
 /*
     @brief Отмена регистрации обработчика события.
@@ -161,7 +168,7 @@ API bool event_register(event_code code, void* listener, on_event_callback handl
     @param handler Функция-обработчик события.
     @return true - успешная отписка, false - ошибка.
 */
-API bool event_unregister(event_code code, void* listener, on_event_callback handler);
+CORE_API bool event_unregister(event_code code, void* listener, on_event_callback handler);
 
 /*
     @brief Отправка события в систему.
@@ -170,7 +177,7 @@ API bool event_unregister(event_code code, void* listener, on_event_callback han
     @param data Контекст события с данными (может быть nullptr).
     @return true - событие обработано, false - ошибка отправки.
 */
-API bool event_send(event_code code, void* sender, event_context* data);
+CORE_API bool event_send(event_code code, void* sender, event_context* data);
 
 /*
     @brief Получает строковое представление кода события.
@@ -178,4 +185,4 @@ API bool event_send(event_code code, void* sender, event_context* data);
     @param code Код события, для которого требуется получить строковое представление.
     @return Указатель на строку с именем события, или "UNKNOWN" для неизвестных кодов.
 */
-API const char* event_code_to_str(event_code code);
+CORE_API const char* event_code_to_str(event_code code);

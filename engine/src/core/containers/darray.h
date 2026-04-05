@@ -55,13 +55,13 @@ typedef struct dynamic_array_header {
     @param capacity Начальная емкость массива.
     @return Указатель на массив или nullptr при ошибке выделения памяти.
 */
-API void* dynamic_array_create(u64 stride, u64 capacity);
+CORE_API void* dynamic_array_create(u64 stride, u64 capacity);
 
 /*
     @brief Уничтожает динамический массив и освобождает память.
     @param array Указатель на массив.
 */
-API void dynamic_array_destroy(void* array);
+CORE_API void dynamic_array_destroy(void* array);
 
 /*
     @brief Изменяет размер динамического массива с сохранением существующих данных.
@@ -70,42 +70,42 @@ API void dynamic_array_destroy(void* array);
     @param new_capacity Новая емкость массива.
     @return true - массив успешно изменен, false - ошибка (память не перевыделена, исходный массив остается неизменным).
 */
-API bool dynamic_array_resize(void** array, u32 new_capacity);
+CORE_API bool dynamic_array_resize(void** array, u32 new_capacity);
 
 /*
     @brief Возвращает размер элемента массива в байтах.
     @param array Указатель на массив.
     @return Размер элемента.
 */
-API u64 dynamic_array_stride(void* array);
+CORE_API u64 dynamic_array_stride(void* array);
 
 /*
     @brief Возвращает текущее количество элементов в массиве.
     @param array Указатель на массив.
     @return Количество элементов.
 */
-API u64 dynamic_array_length(void* array);
+CORE_API u64 dynamic_array_length(void* array);
 
 /*
     @brief Возвращает текущую емкость массива.
     @param array Указатель на массив.
     @return Емкость массива.
 */
-API u64 dynamic_array_capacity(void* array);
+CORE_API u64 dynamic_array_capacity(void* array);
 
 /*
     @brief Добавляет элемент в конец массива.
     @param array Указатель на указатель массива (может измениться при реаллокации).
     @param data Указатель на данные для добавления.
 */
-API void dynamic_array_push(void** array, const void* data);
+CORE_API void dynamic_array_push(void** array, const void* data);
 
 /*
     @brief Удаляет последний элемент массива.
     @param array Указатель на массив.
     @param out_data Указатель для копирования удаляемого элемента (может быть nullptr).
 */
-API void dynamic_array_pop(void* array, void* out_data);
+CORE_API void dynamic_array_pop(void* array, void* out_data);
 
 /*
     @brief Вставляет элемент в указанную позицию.
@@ -113,7 +113,7 @@ API void dynamic_array_pop(void* array, void* out_data);
     @param index Позиция для вставки.
     @param data Указатель на данные для вставки.
 */
-API void dynamic_array_insert(void** array, u64 index, const void* data);
+CORE_API void dynamic_array_insert(void** array, u64 index, const void* data);
 
 /*
     @brief Удаляет элемент из указанной позиции.
@@ -121,21 +121,21 @@ API void dynamic_array_insert(void** array, u64 index, const void* data);
     @param index Позиция для удаления.
     @param out_data Указатель для копирования удаляемого элемента (может быть nullptr).
 */
-API void dynamic_array_remove(void* array, u64 index, void* out_data);
+CORE_API void dynamic_array_remove(void* array, u64 index, void* out_data);
 
 /*
     @brief Очищает массив (устанавливает длину в 0, но сохраняет емкость).
     @param array Указатель на массив.
     @param zero_memory Если true, обнуляет всю память массива.
 */
-API void dynamic_array_clear(void* array, bool zero_memory);
+CORE_API void dynamic_array_clear(void* array, bool zero_memory);
 
 /*
     @brief Устанавливает новую длину массива.
     @param array Указатель массив.
     @param length Новая длина массива.
 */
-API void dynamic_array_set_length(void* array, u64 length);
+CORE_API void dynamic_array_set_length(void* array, u64 length);
 
 /*
     @brief Создает динамический массив для указанного типа.

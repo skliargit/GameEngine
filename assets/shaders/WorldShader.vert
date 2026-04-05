@@ -14,15 +14,14 @@ layout(set = 0, binding = 0) uniform camera_ubo {
 } camera;
 
 // Push константы (обновляется на каждый объект/команду рисования).
-// layout(push_constant) uniform model_ubo {
-//     mat4 transform;  // Матрица трансформации объекта.
-// } model;
+layout(push_constant) uniform model_ubo {
+    mat4 transform;  // Матрица трансформации объекта.
+} model;
 
 void main()
 {
     out_color = in_color;
 
     // Четвертый параметр указывает: 1.0 - точка в пространстве, 0.0 - вектор направления.
-    // gl_Position = camera.proj * camera.view * model.transform * vec4(in_position, 1.0);
-    gl_Position = camera.proj * camera.view * vec4(in_position, 1.0);
+    gl_Position = camera.proj * camera.view * model.transform * vec4(in_position, 1.0);
 }

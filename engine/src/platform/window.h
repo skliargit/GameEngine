@@ -2,8 +2,8 @@
     @file window.h
     @brief Кросс-платформенный интерфейс для работы с окнами.
     @author Дмитрий Скляр.
-    @version 1.0
-    @date 22-08-2025
+    @version 1.1
+    @date 04-02-2026
 
     @license Лицензия Apache, версия 2.0 («Лицензия»);
           Вы не имеете права использовать этот файл без соблюдения условий Лицензии.
@@ -26,126 +26,34 @@
 #pragma once
 
 #include <core/defines.h>
-#include <core/input_types.h>
-
-// @brief Контекст окна (представляет окно платформы).
-typedef struct platform_window platform_window;
-
-// @brief Тип оконной системы/бэкенда.
-typedef enum platform_window_backend_type {
-    // @brief Автоматический выбор оконной системы (по умолчанию).
-    PLATFORM_WINDOW_BACKEND_TYPE_AUTO,
-    // @brief Wayland - современный протокол отображения Linux.
-    PLATFORM_WINDOW_BACKEND_TYPE_WAYLAND,
-    // @brief XCB (X11/Xorg) - традиционная оконная система Linux.
-    PLATFORM_WINDOW_BACKEND_TYPE_XCB,
-    // @brief Classic Window Manager - оконная система Windows.
-    PLATFORM_WINDOW_BACKEND_TYPE_WIN32,
-    // @brief Количество доступных типов оконных систем (не является реальным типом).
-    PLATFORM_WINDOW_BACKEND_TYPE_COUNT
-} platform_window_backend_type;
-
-/*
-    @brief Callback-функция, вызываемая при попытке закрытия окна.
-    @note Может использоваться для подтверждения закрытия или сохранения данных.
-*/
-typedef void (*platform_window_on_close_callback)();
-
-/*
-    @brief Callback-функция, вызываемая при изменении размера окна.
-    @param new_width Новая ширина окна в пикселях.
-    @param new_height Новая высота окна в пикселях.
-*/
-typedef void (*platform_window_on_resize_callback)(const u32 new_width, const u32 new_height);
-
-/*
-    @brief Callback-функция, вызываемая при изменении состояния фокуса окна.
-    @param focus_state true - окно получило фокус, false - окно потеряло фокус.
-*/
-typedef void (*platform_window_on_focus_callback)(const bool focus_state);
-
-/*
-    @brief Callback-функция для обработки нажатий и отпусканий клавиш клавиатуры.
-    @param key Код клавиши.
-    @param state true - клавиша нажата, false - клавиша отпущена.
-*/
-typedef void (*platform_window_on_key_callback)(const keyboard_key key, const bool state);
-
-/*
-    @brief Callback-функция для обработки нажатий кнопок мыши.
-    @param btn Код кнопки мыши.
-    @param state true - кнопка нажата, false - кнопка отпущена.
-*/
-typedef void (*platform_window_on_mouse_button_callback)(const mouse_button btn, const bool state);
-
-/*
-    @brief Callback-функция для обработки движения курсора мыши в пределах окна.
-    @param x Координата X курсора мыши относительно левого края окна.
-    @param y Координата Y курсора мыши относительно верхнего края окна.
-*/
-typedef void (*platform_window_on_mouse_move_callback)(const i32 x, const i32 y);
-
-/*
-    @brief Callback-функция для обработки прокрутки колеса мыши.
-    @param vertical_delta Значение вертикальной прокрутки (положительное - вперед, отрицательное - назад).
-    @param horizontal_delta Значение горизонтальной прокрутки (отрицательное - влево, положительное - вправо).
-*/
-typedef void (*platform_window_on_mouse_wheel_callback)(const i32 vertical_delta, const i32 horizontal_delta);
-
-// TODO: Дополнительные события для будущей реализации:
-// on_move - перемещение окна
-// on_char - ввод символов (текстовый ввод)
-// on_minimize - минимизация окна
-// on_maximize - максимизация окна
-// on_restore - восстановление окна после минимизации/максимизации
-
-// @brief Конфигурация для создания нового окна.
-typedef struct platform_window_config {
-    // @brief Заголовок окна, отображаемый в заголовке окна.
-    const char* title;
-    // @brief Начальная ширина окна в пикселях.
-    u32 width;
-    // @brief Начальная высота окна в пикселях.
-    u32 height;
-    // @brief Callback-функция, вызываемая при попытке закрытия окна, может быть nullptr.
-    platform_window_on_close_callback on_close;
-    // @brief Callback-функция, вызываемая при изменении размера окна, может быть nullptr.
-    platform_window_on_resize_callback on_resize;
-    // @brief Callback-функция, вызываемая при изменении состояния фокуса окна, может быть nullptr.
-    platform_window_on_focus_callback on_focus;
-    // @brief Callback-функция для обработки нажатий и отпусканий клавиш клавиатуры, может быть nullptr.
-    platform_window_on_key_callback on_key;
-    // @brief Callback-функция для обработки нажатий кнопок мыши, может быть nullptr.
-    platform_window_on_mouse_button_callback on_mouse_button;
-    // @brief Callback-функция для обработки движения курсора мыши в пределах окна, может быть nullptr.
-    platform_window_on_mouse_move_callback on_mouse_move;
-    // @brief Callback-функция для обработки прокрутки колеса мыши, может быть nullptr.
-    platform_window_on_mouse_wheel_callback on_mouse_wheel;
-} platform_window_config;
+#include <platform/window_types.h>
 
 /*
     @brief Инициализирует подсистему для работы с окнами.
-    @note Должна быть вызвана один раз при старте приложения, перед использованием любых других функций работы с окнами.
-    @warning Не thread-safe. Должна вызываться из основного потока.
     @brief type Тип используемого оконного бэкенда.
     @return true - инициализация успешна, false - произошла ошибка.
+
+    @warning Не thread-safe. Должна вызываться из основного потока.
+    @note Должна быть вызвана один раз перед использованием любых других функций работы с окнами.
 */
-bool platform_window_initialize(platform_window_backend_type type);
+bool platform_window_initialize(platform_window_backend_t type);
 
 /*
     @brief Завершает работу подсистемы для работы с окнами.
-    @note Должна быть вызвана при завершении приложения, после уничтожения всех окон.
+
     @warning Не thread-safe. Должна вызываться из основного потока.
+    @note Должна быть вызвана при завершении приложения, после уничтожения всех окон.
 */
 void platform_window_shutdown();
 
 /*
     @brief Проверяет, была ли инициализирована подсистема для работы с окнами.
-    @note Может использоваться для проверки состояния подсистемы перед вызовом других функций.
-    @warning Не thread-safe. Должна вызываться из того же потока, что и инициализация/завершение.
     @return true - подсистема инициализирована и готова к работе, false - подсистема не инициализирована.
+
+    @warning Не thread-safe. Должна вызываться из того же потока, что и инициализация/завершение.
+    @note Может использоваться для проверки состояния подсистемы перед вызовом других функций.
 */
-API bool platform_window_is_initialized();
+CORE_API bool platform_window_is_initialized();
 
 /*
     @brief Обрабатывает оконные сообщения/события.
@@ -158,20 +66,20 @@ bool platform_window_poll_events();
     @param config Указатель на структуру с параметрами окна.
     @return Указатель на контекст созданного окна в случае успеха, nullptr при ошибке.
 */
-API platform_window* platform_window_create(const platform_window_config* config);
+CORE_API platform_window_t* platform_window_create(const platform_window_config_t* config);
 
 /*
     @brief Уничтожает созданное окно и освобождает ресурсы.
     @param window Указатель на контекст окна для уничтожения.
 */
-API void platform_window_destroy(platform_window* window);
+CORE_API void platform_window_destroy(platform_window_t* window);
 
 /*
     @brief Получает текущий заголовок окна.
     @param window Указатель на контекст окна для получения заголовка.
     @return Указатель на строку с заголовком окна.
 */
-API const char* platform_window_get_title(platform_window* window);
+CORE_API const char* platform_window_get_title(platform_window_t* window);
 
 /*
     @brief Получает размеры клиентской области окна в пикселях.
@@ -179,4 +87,29 @@ API const char* platform_window_get_title(platform_window* window);
     @param width Указатель на переменную для сохранения ширина окна.
     @param height Указатель на переменную для сохранения высоты окна.
 */
-API void platform_window_get_resolution(platform_window* window, u32* width, u32* height);
+CORE_API void platform_window_get_resolution(platform_window_t* window, u32* width, u32* height);
+
+/*
+    @brief Устанавливает функцию для обработки указанного события окна.
+    @param window Указатель на контекст окна для установки функции-обработчика.
+    @param event Тип события для подписки.
+    @param callback Функция-обработчик (может быть nullptr для удаления обработчика).
+    @param user_data Пользовательские данные, передаваемые в функцию-обработчик (может быть nullptr).
+*/
+CORE_API void platform_window_set_event_callback(platform_window_t* window, platform_window_event_t event, platform_window_event_callback callback, void* user_data);
+
+/*
+*/
+CORE_API void platform_window_hide_cursor(platform_window_t* window);
+
+/*
+*/
+CORE_API void platform_window_show_cursor(platform_window_t* window);
+
+/*
+*/
+CORE_API void platform_window_lock_cursor(platform_window_t* window);
+
+/*
+*/
+CORE_API void platform_window_unlock_cursor(platform_window_t* window);

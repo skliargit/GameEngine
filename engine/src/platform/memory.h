@@ -46,7 +46,7 @@ void platform_memory_shutdown();
     @warning Не thread-safe. Должна вызываться из того же потока, что и инициализация/завершение.
     @return true - подсистема инициализирована и готова к работе, false - подсистема не инициализирована.
 */
-API bool platform_memory_is_initialized();
+CORE_API bool platform_memory_is_initialized();
 
 /*
     @brief Запрашивает у системы блок памяти заданного размера.
@@ -55,7 +55,7 @@ API bool platform_memory_is_initialized();
     @param size Размер выделяемого блока памяти в байтах.
     @return Указатель на выделенный блок памяти или nullptr при ошибке.
 */
-API void* platform_memory_allocate(u64 size);
+CORE_API void* platform_memory_allocate(u64 size);
 
 /*
     @brief Освобождает ранее выделенный блок памяти.
@@ -63,7 +63,7 @@ API void* platform_memory_allocate(u64 size);
     @warning Не thread-safe. Клиентский код должен обеспечить синхронизацию при использовании из нескольких потоков.
     @param block Указатель на блок памяти для освобождения.
 */
-API void platform_memory_free(void* block);
+CORE_API void platform_memory_free(void* block);
 
 /*
     @brief Заполняет блок памяти нулевыми байтами.
@@ -71,7 +71,7 @@ API void platform_memory_free(void* block);
     @param block Указатель на блок памяти.
     @param size Размер блока памяти в байтах.
 */
-API void platform_memory_zero(void* block, u64 size);
+CORE_API void platform_memory_zero(void* block, u64 size);
 
 /*
     @brief Заполняет блок памяти указанным значением.
@@ -80,7 +80,7 @@ API void platform_memory_zero(void* block, u64 size);
     @param size Размер блока памяти в байтах.
     @param value Значение для заполнения (диапазон 0-255).
 */
-API void platform_memory_set(void* block, u64 size, u8 value);
+CORE_API void platform_memory_set(void* block, u64 size, u8 value);
 
 /*
     @brief Копирует данные из одного блока памяти в другой.
@@ -90,7 +90,7 @@ API void platform_memory_set(void* block, u64 size, u8 value);
     @param src Указатель на блок памяти источника.
     @param size Количество байтов для копирования.
 */
-API void platform_memory_copy(void* dst, const void* src, u64 size);
+CORE_API void platform_memory_copy(void* dst, const void* src, u64 size);
 
 /*
     @brief Копирует данные из одного блока памяти в другой с обработкой перекрытия регионов.
@@ -100,4 +100,4 @@ API void platform_memory_copy(void* dst, const void* src, u64 size);
     @param src Указатель на блок памяти источника.
     @param size Количество байтов для копирования.
 */
-API void platform_memory_move(void* dst, const void* src, u64 size);
+CORE_API void platform_memory_move(void* dst, const void* src, u64 size);

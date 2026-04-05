@@ -46,7 +46,7 @@ void platform_thread_shutdown();
     @warning Не thread-safe. Должна вызываться из того же потока, что и инициализация/завершение.
     @return true - подсистема инициализирована и готова к работе, false - подсистема не инициализирована.
 */
-API bool platform_thread_is_initialized();
+CORE_API bool platform_thread_is_initialized();
 
 /*
     @brief Приостанавливает выполнение текущего потока на заданное время.
@@ -55,7 +55,7 @@ API bool platform_thread_is_initialized();
     @param time_ms Время приостановки в миллисекундах. Должно быть больше 0.
     @return true - приостановка успешно завершена, false - произошла ошибка.
 */
-API bool platform_thread_sleep(u32 time_ms);
+CORE_API bool platform_thread_sleep(u32 time_ms);
 
 /*
     @brief Создает новый поток выполнения.
@@ -63,11 +63,11 @@ API bool platform_thread_sleep(u32 time_ms);
     @param data Данные для передачи в функцию-исполнитель.
     @return Идентификатор созданного потока или 0 при ошибке.
 */
-// API thread_id platform_thread_create(thread_func func, void* data);
+// CORE_API thread_id platform_thread_create(thread_func func, void* data);
 
 /*
     @brief Ожидает завершения указанного потока.
     @param thread_id Идентификатор потока для ожидания.
     @return Код возврата потока или -1 при ошибке.
 */
-// API i32 platform_thread_join(thread_id thread_id);
+// CORE_API i32 platform_thread_join(thread_id thread_id);

@@ -62,7 +62,7 @@
 
         fprintf(stdout, "\n");
         initialized = true;
-        return true;
+        return initialized;
     }
 
     void platform_console_shutdown()
@@ -99,18 +99,51 @@
         return initialized;
     }
 
-    void platform_console_write(console_stream stream, console_color color, const char* message)
+    void platform_console_write(console_stream_t stream, console_color_t color, const char* message)
     {
-        if(!initialized)
-        {
-            return;
-        }
+        if(!initialized) return;
 
         ASSERT(stream < CONSOLE_STREAM_COUNT, "Must be less than CONSOLE_STREAM_COUNT");
         ASSERT(color < CONSOLE_COLOR_COUNT, "Must be less than CONSOLE_COLOR_COUNT");
         ASSERT(message != nullptr, "Message pointer must be non-null.");
 
         fprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), "\033[%sm%s\033[0m", colors[color], message);
+    }
+
+    void platform_console_writef(console_stream_t stream, console_color_t color, const char* format, ...)
+    {
+        if(!initialized) return;
+
+        ASSERT(stream < CONSOLE_STREAM_COUNT, "Must be less than CONSOLE_STREAM_COUNT");
+        ASSERT(color < CONSOLE_COLOR_COUNT, "Must be less than CONSOLE_COLOR_COUNT");
+        ASSERT(format != nullptr, "Message pointer must be non-null.");
+        
+        va_list args;
+        va_start(args, format);
+
+        fprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), "\033[%sm", colors[color]);
+        vfprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), format, args);
+        fprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), "\033[0m");
+
+        va_end(args);
+    }
+
+    void platform_console_writefv(console_stream_t stream, console_color_t color, const char* format, void* args)
+    {
+        if(!initialized) return;
+
+        ASSERT(stream < CONSOLE_STREAM_COUNT, "Must be less than CONSOLE_STREAM_COUNT");
+        ASSERT(color < CONSOLE_COLOR_COUNT, "Must be less than CONSOLE_COLOR_COUNT");
+        ASSERT(format != nullptr, "Message pointer must be non-null.");
+        ASSERT(args != nullptr, "Variadic arguments pointer must be non-null.");
+
+        // NOTE: Параметры args могут использоваться только для одного вызова vsnprintf, для повторного использования
+        //       необходима копия va_list или последовательность va_end -> va_start -> vsnprintf -> va_end.
+        va_list copy = args;
+
+        fprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), "\033[%sm", colors[color]);
+        vfprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), format, copy);
+        fprintf((stream == CONSOLE_STREAM_STDOUT ? stdout : stderr), "\033[0m");
     }
 
 #endif

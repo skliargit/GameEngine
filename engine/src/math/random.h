@@ -107,7 +107,7 @@ typedef struct math_random_generator {
     @param type Тип алгоритма генерации.
     @param seed Начальное значение. При seed = 0 используется seed на основе системного времени.
 */
-API void math_random_generator_init(math_random_generator* gen, math_random_generator_type type, u64 seed);
+CORE_API void math_random_generator_init(math_random_generator* gen, math_random_generator_type type, u64 seed);
 
 /*
     @brief Перемещает генератор вперед на 2^128 шагов (jump function).
@@ -115,7 +115,7 @@ API void math_random_generator_init(math_random_generator* gen, math_random_gene
     @note Позволяет создать 2^128 непересекающихся последовательностей из одного seed (полезно для многопоточности).
     @param gen Генератор для модификации.
 */
-API void math_random_generator_jump(math_random_generator* gen);
+CORE_API void math_random_generator_jump(math_random_generator* gen);
 
 /*
     @brief Перемещает генератор вперед на 2^192 шагов (long jump).
@@ -123,7 +123,7 @@ API void math_random_generator_jump(math_random_generator* gen);
     @note Позволяет создать 2^192 непересекающихся последовательностей из одного seed (полезно для многопоточности).
     @param gen Генератор для модификации.
 */
-API void math_random_generator_long_jump(math_random_generator* gen);
+CORE_API void math_random_generator_long_jump(math_random_generator* gen);
 
 /*
     @brief Генерирует 32-битное беззнаковое псевдослучайное число.
@@ -131,7 +131,7 @@ API void math_random_generator_long_jump(math_random_generator* gen);
     @param gen Инициализированный генератор (не может быть nullptr).
     @return Случайное число в диапазоне [0, U32_MAX].
 */
-API u32 math_random_u32(math_random_generator* gen);
+CORE_API u32 math_random_u32(math_random_generator* gen);
 
 /*
     @brief Генерирует 32-битное беззнаковое число в заданном диапазоне.
@@ -142,7 +142,7 @@ API u32 math_random_u32(math_random_generator* gen);
     @param max Максимальное значение.
     @return Случайное число в диапазоне [min, max).
 */
-API u32 math_random_u32_range(math_random_generator* gen, u32 min, u32 max);
+CORE_API u32 math_random_u32_range(math_random_generator* gen, u32 min, u32 max);
 
 /*
     @brief Генерирует 32-битное знаковое псевдослучайное число.
@@ -150,7 +150,7 @@ API u32 math_random_u32_range(math_random_generator* gen, u32 min, u32 max);
     @param gen Инициализированный генератор (не может быть nullptr).
     @return Случайное число в диапазоне [I32_MIN, I32_MAX].
 */
-API i32 math_random_i32(math_random_generator* gen);
+CORE_API i32 math_random_i32(math_random_generator* gen);
 
 /*
     @brief Генерирует 32-битное знаковое число в заданном диапазоне.
@@ -161,7 +161,7 @@ API i32 math_random_i32(math_random_generator* gen);
     @param max Максимальное значение.
     @return Случайное число в диапазоне [min, max).
 */
-API i32 math_random_i32_range(math_random_generator* gen, i32 min, i32 max);
+CORE_API i32 math_random_i32_range(math_random_generator* gen, i32 min, i32 max);
 
 /*
     @brief Генерирует 64-битное беззнаковое псевдослучайное число.
@@ -169,7 +169,7 @@ API i32 math_random_i32_range(math_random_generator* gen, i32 min, i32 max);
     @param gen Инициализированный генератор (не может быть nullptr).
     @return Случайное число в диапазоне [0, U64_MAX].
 */
-API u64 math_random_u64(math_random_generator* gen);
+CORE_API u64 math_random_u64(math_random_generator* gen);
 
 /*
     @brief Генерирует 64-битное беззнаковое число в заданном диапазоне.
@@ -180,7 +180,7 @@ API u64 math_random_u64(math_random_generator* gen);
     @param max Максимальное значение.
     @return Случайное число в диапазоне [min, max).
 */
-API u64 math_random_u64_range(math_random_generator* gen, u64 min, u64 max);
+CORE_API u64 math_random_u64_range(math_random_generator* gen, u64 min, u64 max);
 
 /*
     @brief Генерирует 64-битное знаковое псевдослучайное число.
@@ -188,7 +188,7 @@ API u64 math_random_u64_range(math_random_generator* gen, u64 min, u64 max);
     @param gen Инициализированный генератор (не может быть nullptr).
     @return Случайное число в диапазоне [I64_MIN, I64_MAX].
 */
-API i64 math_random_i64(math_random_generator* gen);
+CORE_API i64 math_random_i64(math_random_generator* gen);
 
 /*
     @brief Генерирует 64-битное знаковое число в заданном диапазоне.
@@ -199,7 +199,7 @@ API i64 math_random_i64(math_random_generator* gen);
     @param max Максимальное значение.
     @return Случайное число в диапазоне [min, max).
 */
-API i64 math_random_i64_range(math_random_generator* gen, i64 min, i64 max);
+CORE_API i64 math_random_i64_range(math_random_generator* gen, i64 min, i64 max);
 
 /*
     @brief Генерирует число с плавающей точкой одинарной точности.
@@ -207,7 +207,7 @@ API i64 math_random_i64_range(math_random_generator* gen, i64 min, i64 max);
     @param gen Инициализированный генератор (не может быть nullptr).
     @return Случайное число в диапазоне [0.0, 1.0).
 */
-API f32 math_random_f32(math_random_generator* gen);
+CORE_API f32 math_random_f32(math_random_generator* gen);
 
 /*
     @brief Генерация нескольких чисел за вызов (оптимизация).
@@ -217,7 +217,7 @@ API f32 math_random_f32(math_random_generator* gen);
     @param count Количество чисел для генерации (должно быть > 0).
     @param out Массив для результатов (размер >= count).
 */
-API void math_random_f32_bulk(math_random_generator* gen, u32 count, f32* out);
+CORE_API void math_random_f32_bulk(math_random_generator* gen, u32 count, f32* out);
 
 /*
     @brief Генерирует число с плавающей точкой в заданном диапазоне.
@@ -228,4 +228,4 @@ API void math_random_f32_bulk(math_random_generator* gen, u32 count, f32* out);
     @param max Максимальное значение.
     @return Случайное число в диапазоне [min, max).
 */
-API f32 math_random_f32_range(math_random_generator* gen, f32 min, f32 max);
+CORE_API f32 math_random_f32_range(math_random_generator* gen, f32 min, f32 max);

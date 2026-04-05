@@ -12,8 +12,6 @@
 #include "core/memory.h"
 #include "core/string.h"
 #include "core/containers/darray.h"
-#include "math/types.h"
-#include "math/matrix.h"
 
 static vulkan_context* context = nullptr;
 
@@ -704,15 +702,6 @@ bool vulkan_backend_initialize(platform_window* window)
         return false;
     }
 
-    // TODO: Временно!
-    const f32 fov = math_deg_to_rad(60);
-    const f32 aspect = (f32)context->frame_width / context->frame_height;
-    context->camera.proj = mat4_perspective(fov, aspect, 0.1f, 1000.0f);
-
-    // NOTE: Это не позиция самой камеры, а дополнительное смещение всех вершин мира,
-    //       что можно трактовать как перемещение камеры от центра мира.
-    context->camera.view = mat4_translation(vec3_forward());
-
     LOG_TRACE("Vulkan backend initialized successfully.");
     return true;
 }
@@ -834,10 +823,6 @@ void vulkan_backend_resize(const u32 width, const u32 height)
     context->frame_pending_height = height;
     context->frame_pending_generation++;
     LOG_TRACE("Vulkan resize event to %ux%u, generation: %u.", width, height, context->frame_pending_generation);
-
-    // TODO: Временно для камеры!
-    const f32 aspect = (f32)width / height;
-    mat4_perspective_update_aspect(&context->camera.proj, aspect);
 }
 
 bool vulkan_backend_frame_begin()
@@ -1034,7 +1019,10 @@ bool vulkan_backend_frame_begin()
     vulkan_shader_use(context, &context->world_shader);
 
     // Обновление данных камеры и применение их.
-    vulkan_shader_update_camera(context, &context->world_shader, &context->camera);
+    vulkan_shader_update_camera(context, &context->world_shader, &context->world_shader.camera);
+
+    // Обновление позиции модели.
+    vulkan_shader_update_model(context, &context->world_shader, &context->world_shader.model);
 
     // Использование буферов для рисования.
     VkDeviceSize offset = 0;
@@ -1152,4 +1140,15 @@ bool vulkan_backend_frame_end()
     vulkan_swapchain_present(context, &context->swapchain, present_queue, context->image_complete_semaphores[image_index], image_index);
 
     return true;
+}
+
+void vulkan_backend_update_camera(const mat4* proj, const mat4* view)
+{
+    context->world_shader.camera.proj = *proj;
+    context->world_shader.camera.view = *view;
+}
+
+void vulkan_backend_update_model(const mat4* model)
+{
+    context->world_shader.model = *model;
 }

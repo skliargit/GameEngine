@@ -1,16 +1,13 @@
 #include "core/input.h"
 #include "core/memory.h"
+#include "core/logger.h"
 #include "debug/assert.h"
 
 typedef struct input_state {
     // Состояние всех клавиш.
     bool keys[KEY_COUNT];
     // Состояние всех кнопок.
-    bool buttons[BTN_COUNT];
-    // Позиция курсора по x.
-    i32 position_x;
-    // Позиция курсора по y.
-    i32 position_y;
+    bool buttons[BUTTON_COUNT];
 } input_state;
 
 typedef struct input_system_context {
@@ -19,10 +16,18 @@ typedef struct input_system_context {
         input_state current;
         // Состояние ввода на предыдущем кадре.
         input_state previous;
-        // Значение вертикальной прокрутки.
-        i32 vertical_wheel_delta;
-        // Значение горизонтальной прокрутки.
-        i32 horizontal_wheel_delta;
+        // Абсолютная позиция курсора по x.
+        i32 position_x;
+        // Абсолютная позиция курсора по y.
+        i32 position_y;
+        // Относительная позиция курсора по x.
+        i32 delta_x;
+        // Относительная позиция курсора по y.
+        i32 delta_y;
+        // Дельта вертикальной прокрутки колесика.
+        i32 wheel_delta_v;
+        // Дельта горизонтальной прокрутки колесика.
+        i32 wheel_delta_h;
     } state;
 } input_system_context;
 
@@ -60,8 +65,10 @@ void input_system_update()
 {
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
 
-    context->state.vertical_wheel_delta = 0.0f;
-    context->state.horizontal_wheel_delta = 0.0f;
+    context->state.delta_x = 0;
+    context->state.delta_y = 0;
+    context->state.wheel_delta_v = 0.0f;
+    context->state.wheel_delta_h = 0.0f;
     mcopy(&context->state.previous, &context->state.current, sizeof(input_state));
 }
 
@@ -76,7 +83,7 @@ void input_keyboard_key_update(keyboard_key key, bool state)
 void input_mouse_button_update(mouse_button button, bool state)
 {
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
-    ASSERT(button > BTN_UNKNOWN && button < BTN_COUNT, "Button code must be between 0 and BTN_COUNT.");
+    ASSERT(button > BUTTON_UNKNOWN && button < BUTTON_COUNT, "Button code must be between 0 and BUTTON_COUNT.");
 
     context->state.current.buttons[button] = state;
 }
@@ -85,16 +92,24 @@ void input_mouse_position_update(i32 x, i32 y)
 {
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
 
-    context->state.current.position_x = x;
-    context->state.current.position_y = y;
+    context->state.position_x = x;
+    context->state.position_y = y;
+}
+
+void input_mouse_delta_update(i32 x, i32 y)
+{
+    ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
+
+    context->state.delta_x = x;
+    context->state.delta_y = y;
 }
 
 void input_mouse_wheel_update(i32 vertical_delta, i32 horizontal_delta)
 {
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
 
-    context->state.vertical_wheel_delta   += vertical_delta;
-    context->state.horizontal_wheel_delta += horizontal_delta;
+    context->state.wheel_delta_v += vertical_delta;
+    context->state.wheel_delta_h += horizontal_delta;
 }
 
 bool input_key_down(keyboard_key key)
@@ -178,7 +193,7 @@ const char* input_key_to_str(keyboard_key key)
 bool input_mouse_down(mouse_button button)
 {
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
-    ASSERT(button > BTN_UNKNOWN && button < BTN_COUNT, "Button code must be between 0 and BTN_COUNT.");
+    ASSERT(button < BUTTON_COUNT, "Button code must be between 0 and BUTTON_COUNT.");
 
     return context->state.current.buttons[button] && !context->state.previous.buttons[button];
 }
@@ -186,7 +201,7 @@ bool input_mouse_down(mouse_button button)
 bool input_mouse_up(mouse_button button)
 {
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
-    ASSERT(button > BTN_UNKNOWN && button < BTN_COUNT, "Button code must be between 0 and BTN_COUNT.");
+    ASSERT(button < BUTTON_COUNT, "Button code must be between 0 and BUTTON_COUNT.");
 
     return !context->state.current.buttons[button] && context->state.previous.buttons[button];
 }
@@ -194,7 +209,7 @@ bool input_mouse_up(mouse_button button)
 bool input_mouse_held(mouse_button button)
 {
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
-    ASSERT(button > BTN_UNKNOWN && button < BTN_COUNT, "Button code must be between 0 and BTN_COUNT.");
+    ASSERT(button < BUTTON_COUNT, "Button code must be between 0 and BUTTON_COUNT.");
 
     return context->state.current.buttons[button];
 }
@@ -205,18 +220,24 @@ void input_mouse_position(i32* out_x, i32* out_y)
     ASSERT(out_x != nullptr, "Position pointer must be non-null.");
     ASSERT(out_y != nullptr, "Position pointer must be non-null.");
 
-    *out_x = context->state.current.position_x;
-    *out_y = context->state.current.position_y;
+    *out_x = context->state.position_x;
+    *out_y = context->state.position_y;
 }
 
-void input_mouse_move_delta(i32* out_dx, i32* out_dy)
+bool input_mouse_delta(i32* out_dx, i32* out_dy)
 {
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
     ASSERT(out_dx != nullptr, "Offset pointer must be non-null.");
     ASSERT(out_dy != nullptr, "Offset pointer must be non-null.");
 
-    *out_dx = context->state.current.position_x - context->state.previous.position_x;
-    *out_dy = context->state.current.position_y - context->state.previous.position_y;
+    if(context->state.delta_x != 0 || context->state.delta_y != 0)
+    {
+        *out_dx = context->state.delta_x;
+        *out_dy = context->state.delta_y;
+        return true;
+    }
+
+    return false;
 }
 
 bool input_mouse_wheel_vertical(i32* out_delta)
@@ -224,7 +245,7 @@ bool input_mouse_wheel_vertical(i32* out_delta)
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
     ASSERT(out_delta != nullptr, "Delta pointer must be non-null.");
 
-    *out_delta = context->state.vertical_wheel_delta;
+    *out_delta = context->state.wheel_delta_v;
     return *out_delta != 0;
 }
 
@@ -233,20 +254,20 @@ bool input_mouse_wheel_horizontal(i32* out_delta)
     ASSERT(context != nullptr, "Input system not initialized. Call input_system_initialize() first.");
     ASSERT(out_delta != nullptr, "Delta pointer must be non-null.");
 
-    *out_delta = context->state.horizontal_wheel_delta;
+    *out_delta = context->state.wheel_delta_h;
     return *out_delta != 0;
 }
 
 const char* input_mouse_button_to_str(mouse_button button)
 {
-    ASSERT(button > BTN_UNKNOWN && button < BTN_COUNT, "Button code must be between 0 and BTN_COUNT.");
+    ASSERT(button > BUTTON_UNKNOWN && button < BUTTON_COUNT, "Button code must be between 0 and BUTTON_COUNT.");
 
-    static const char* button_strings[BTN_COUNT] = {
-        [BTN_LEFT]     = "LEFT",    [BTN_RIGHT]    = "RIGHT",    [BTN_MIDDLE]   = "MIDDLE",
-        [BTN_FORWARD]  = "FORWARD", [BTN_BACKWARD] = "BACKWARD",
+    static const char* button_strings[BUTTON_COUNT] = {
+        [BUTTON_LEFT]     = "LEFT",    [BUTTON_RIGHT]    = "RIGHT",    [BUTTON_MIDDLE]   = "MIDDLE",
+        [BUTTON_FORWARD]  = "FORWARD", [BUTTON_BACKWARD] = "BACKWARD",
     };
 
-    if(button <= BTN_UNKNOWN || button >= BTN_COUNT || !button_strings[button])
+    if(button <= BUTTON_UNKNOWN || button >= BUTTON_COUNT || !button_strings[button])
     {
         return "UNKNOWN";
     }

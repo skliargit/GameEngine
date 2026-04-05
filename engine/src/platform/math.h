@@ -29,7 +29,7 @@
     @param x Угол в радианах.
     @return Синус угла в диапазоне [-1.0, 1.0].
 */
-API f32 platform_math_sin(f32 x);
+CORE_API f32 platform_math_sin(f32 x);
 
 /*
     @brief Вычисляет арксинус числа.
@@ -37,14 +37,14 @@ API f32 platform_math_sin(f32 x);
     @param x Число в диапазоне [-1.0, 1.0].
     @return Угол в радианах в диапазоне [-π/2, π/2].
 */
-API f32 platform_math_asin(f32 x);
+CORE_API f32 platform_math_asin(f32 x);
 
 /*
     @brief Вычисляет косинус угла.
     @param x Угол в радианах.
     @return Косинус угла в диапазоне [-1.0, 1.0].
 */
-API f32 platform_math_cos(f32 x);
+CORE_API f32 platform_math_cos(f32 x);
 
 /*
     @brief Вычисляет арккосинус числа.
@@ -52,7 +52,7 @@ API f32 platform_math_cos(f32 x);
     @param x Число в диапазоне [-1.0, 1.0].
     @return Угол в радианах в диапазоне [0, π].
 */
-API f32 platform_math_acos(f32 x);
+CORE_API f32 platform_math_acos(f32 x);
 
 /*
     @brief Вычисляет тангенс угла.
@@ -60,7 +60,7 @@ API f32 platform_math_acos(f32 x);
     @param x Угол в радианах. Не должен быть равен (π/2 + kπ), где k - целое число.
     @return Тангенс угла.
 */
-API f32 platform_math_tan(f32 x);
+CORE_API f32 platform_math_tan(f32 x);
 
 /*
     @brief Вычисляет арктангенс числа.
@@ -68,7 +68,7 @@ API f32 platform_math_tan(f32 x);
     @param x Число в диапазоне [-INF, +INF].
     @return Угол в радианах в диапазоне (-π/2, π/2).
 */
-API f32 platform_math_atan(f32 x);
+CORE_API f32 platform_math_atan(f32 x);
 
 /*
     @brief Вычисляет арктангенс отношения y/x с учетом квадранта.
@@ -78,7 +78,7 @@ API f32 platform_math_atan(f32 x);
     @param x Координата X (прилежащая сторона).
     @return Угол в радианах в диапазоне (-π, π].
 */
-API f32 platform_math_atan2(f32 y, f32 x);
+CORE_API f32 platform_math_atan2(f32 y, f32 x);
 
 /*
     @brief Вычисляет квадратный корень числа.
@@ -86,35 +86,35 @@ API f32 platform_math_atan2(f32 y, f32 x);
     @param x Неотрицательное число.
     @return Квадратный корень числа.
 */
-API f32 platform_math_sqrt(f32 x);
+CORE_API f32 platform_math_sqrt(f32 x);
 
 /*
     @brief Вычисляет абсолютное значение числа (модуль).
     @param x Число с плавающей точкой.
     @return Абсолютное значение числа (|x|).
 */
-API f64 platform_math_abs(f64 x);
+CORE_API f64 platform_math_abs(f64 x);
 
 /*
     @brief Вычисляет абсолютное значение числа (модуль).
     @param x Число с плавающей точкой.
     @return Абсолютное значение числа (|x|).
 */
-API f32 platform_math_absf(f32 x);
+CORE_API f32 platform_math_absf(f32 x);
 
 /*
     @brief Округляет число вниз до ближайшего целого.
     @param x Число с плавающей точкой.void
     @return Наибольшее целое число, меньшее или равное x.
 */
-API f32 platform_math_floor(f32 x);
+CORE_API f32 platform_math_floor(f32 x);
 
 /*
     @brief Округляет число вверх до ближайшего целого.
     @param x Число с плавающей точкой.
     @return Наименьшее целое число, большее или равное x.
 */
-API f32 platform_math_ceil(f32 x);
+CORE_API f32 platform_math_ceil(f32 x);
 
 /*
     @brief Вычисляет двоичный логарифм числа (логарифм по основанию 2).
@@ -122,7 +122,7 @@ API f32 platform_math_ceil(f32 x);
     @param x Положительное число.
     @return Логарифм числа x по основанию 2.
 */
-API f32 platform_math_log2(f32 x);
+CORE_API f32 platform_math_log2(f32 x);
 
 /*
     @brief Возводит число в заданную степень.
@@ -131,4 +131,4 @@ API f32 platform_math_log2(f32 x);
     @param p Показатель степени.
     @return Результат возведения x в степень p.
 */
-API f32 platform_math_pow(f32 x, f32 p);
+CORE_API f32 platform_math_pow(f32 x, f32 p);

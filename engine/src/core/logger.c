@@ -2,23 +2,24 @@
 #include "core/string.h"
 #include "core/memory.h"
 #include "debug/assert.h"
-
 #include "platform/console.h"
 #include "platform/time.h"
 
 #include <stdarg.h>
 
+// TODO: Потокобезопасность!
+
 // Размер стекового буфера.
 #define BUFFER_SIZE 1024
 
 typedef struct log_system_context {
-    log_level level;
+    log_level_t level;
     log_handler_callback handler;
     const void* user_data;
 } log_system_context;
 
 // Объявление функции-обработчика по умолчанию.
-static void log_default_handler(const log_message message, const void* user_data);
+static void log_default_handler(const log_message_t* message);
 
 // Контекст системы логгирования с предустановками.
 static log_system_context context = {
@@ -33,35 +34,31 @@ static log_system_context context = {
 #endif
 };
 
-void log_set_level(log_level level)
+void log_set_level(log_level_t level)
 {
     ASSERT(level < LOG_LEVEL_COUNT, "Must be less than LOG_LEVEL_COUNT.");
 
-    // TODO: Потокобезопасность.
     context.level = level;
 }
 
 void log_set_handler(log_handler_callback handler, const void* user_data)
 {
-    // TODO: Потокобезопасность.
     context.handler = handler;
     context.user_data = user_data;
 }
 
 void log_reset_default_handler()
 {
-    // TODO: Потокобезопасность.
     context.handler = log_default_handler;
     context.user_data = nullptr;
 }
 
-void log_write(log_level level, const char* filename, u32 fileline, const char* format, ...)
+void log_write(log_level_t level, const char* file, u32 line, const char* format, ...)
 {
     ASSERT(level < LOG_LEVEL_COUNT, "Must be less than LOG_LEVEL_COUNT.");
-    ASSERT(filename != nullptr, "Source filename must be provided.");
-    ASSERT(format != nullptr, "Log format string must not be null.");
+    ASSERT(file != nullptr, "File name must be provided.");
+    ASSERT(format != nullptr, "Format string must be non-null.");
 
-    // TODO: Потокобезопасность.
     // Проверка наличия функции обработчика сообщений.
     if(context.handler && level <= context.level)
     {
@@ -83,18 +80,21 @@ void log_write(log_level level, const char* filename, u32 fileline, const char* 
 
         // Форматирование сообщения.
         string_format_va(buffer, buffer_length, format, args);
+
         va_end(args);
 
-        log_message msg;
-        msg.filename        = filename;
-        msg.filename_length = string_length(filename);
-        msg.fileline        = fileline;
-        msg.level           = level;
-        msg.message         = buffer;
-        msg.message_length  = buffer_length;
-        msg.timestamp       = platform_time_now();
+        log_message_t msg = {
+            .filename        = file,
+            .filename_length = string_length(file),
+            .fileline        = line,
+            .level           = level,
+            .message         = buffer,
+            .message_length  = buffer_length,
+            .timestamp       = platform_time_now(),
+            .user_data       = context.user_data
+        };
 
-        context.handler(msg, context.user_data);
+        context.handler(&msg);
 
         if(buffer_length > BUFFER_SIZE)
         {
@@ -109,10 +109,8 @@ void log_write(log_level level, const char* filename, u32 fileline, const char* 
     }
 }
 
-void log_default_handler(const log_message message, const void* user_data)
+void log_default_handler(const log_message_t* message)
 {
-    UNUSED(user_data);
-
     // Текстовые метки сообщений в соответствии с уровнем по умолчанию.
     static const char* levels[LOG_LEVEL_COUNT] = {
         [LOG_LEVEL_FATAL] = "FATAL", [LOG_LEVEL_ERROR] = "ERROR", [LOG_LEVEL_WARN]  = "WARNG",
@@ -120,10 +118,10 @@ void log_default_handler(const log_message message, const void* user_data)
     };
 
     // Цвета сообщений в соответствии с уровнем по умолчанию.
-    static const console_color colors[LOG_LEVEL_COUNT] = {
+    static const console_color_t colors[LOG_LEVEL_COUNT] = {
         [LOG_LEVEL_FATAL] = CONSOLE_COLOR_MAGENTA, [LOG_LEVEL_ERROR] = CONSOLE_COLOR_RED,
         [LOG_LEVEL_WARN]  = CONSOLE_COLOR_ORANGE,  [LOG_LEVEL_INFO]  = CONSOLE_COLOR_GREEN,
-        [LOG_LEVEL_DEBUG] = CONSOLE_COLOR_BLUE,    [LOG_LEVEL_TRACE] = CONSOLE_COLOR_WHITE
+        [LOG_LEVEL_DEBUG] = CONSOLE_COLOR_BLUE,    [LOG_LEVEL_TRACE] = CONSOLE_COLOR_GRAY
     };
 
     // Формат сообщения по умолчанию.
@@ -138,31 +136,31 @@ void log_default_handler(const log_message message, const void* user_data)
     void* buffer = internal_buffer;
 
     // Получение размера буфера сообщения.
-    u32 buffer_length = message.filename_length + message.message_length + 60;
+    u32 buffer_length = message->filename_length + message->message_length + 60;
     if(buffer_length > BUFFER_SIZE)
     {
         // TODO: Использовать линейный распределитель или пул памяти.
         buffer = mallocate(buffer_length, MEMORY_TAG_STRING);
     }
 
-    if(ts < message.timestamp)
+    if(ts < message->timestamp)
     {
-        ts = message.timestamp;
-        dt = platform_time_to_local(message.timestamp);
+        ts = message->timestamp;
+        dt = platform_time_to_local(message->timestamp);
     }
 
     // Копирование сообщения в буфер.
     string_format(buffer, buffer_length, format_message, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second,
-        levels[message.level], message.filename, message.fileline, message.message
+        levels[message->level], message->filename, message->fileline, message->message
     );
 
-    if(message.level <= LOG_LEVEL_ERROR)
+    if(message->level <= LOG_LEVEL_ERROR)
     {
-        platform_console_write_stderr(colors[message.level], buffer);
+        platform_console_write(CONSOLE_STREAM_STDERR, colors[message->level], buffer);
     }
     else
     {
-        platform_console_write_stdout(colors[message.level], buffer);
+        platform_console_write(CONSOLE_STREAM_STDOUT, colors[message->level], buffer);
     }
 
     if(buffer_length > BUFFER_SIZE)

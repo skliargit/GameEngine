@@ -355,6 +355,6 @@ INLINE vec3 quat_rotate_vec3(const vec3 v, const quat q)
     const quat p = {{v.x, v.y, v.z, 0.0f}};
     const quat q_conj = quat_conjugate(q);
     const quat rotated = quat_mul(quat_mul(q, p), q_conj);
-    
+
     return (vec3){{rotated.x, rotated.y, rotated.z}};
 }

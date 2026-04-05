@@ -32,28 +32,28 @@ typedef enum platform_file_mode_flag {
     @param out_file Указатель для сохранения созданного контекста файла.
     @return true файл успешно открыт, false ошибка открытия.
 */
-API bool platform_file_open(const char* path, platform_file_mode_flag mode, platform_file** out_file);
+CORE_API bool platform_file_open(const char* path, platform_file_mode_flag mode, platform_file** out_file);
 
 /*
     @brief Закрывает файл и освобождает связанные с ним ресурсы.
     @warning После вызова этой функции указатель на файл становится недействительным!
     @param file Контекст файла для закрытия.
 */
-API void platform_file_close(platform_file* file);
+CORE_API void platform_file_close(platform_file* file);
 
 /*
     @brief Синхронизирует файл с диском, гарантируя запись всех данных.
     @param file Контекст файла для записи на диск.
     @return true файла успешно синхронизирован, false ошибка синхронизации.
 */
-API bool platform_file_sync(platform_file* file);
+CORE_API bool platform_file_sync(platform_file* file);
 
 /*
     @brief Проверяет существование файла по указанному пути.
     @param path Путь файла существование которого необходимо проверить.
     @return true файл существует, false файл не найден.
 */
-API bool platform_file_exists(const char* path);
+CORE_API bool platform_file_exists(const char* path);
 
 /*
     @brief Возвращает размер указанного файла в байтах.
@@ -61,7 +61,7 @@ API bool platform_file_exists(const char* path);
     @param size Указатель для сохранения размера файла в байтах.
     @return true операция успешно завершена, false ошибка операции.
 */
-API bool platform_file_size(const platform_file* file, u64* size);
+CORE_API bool platform_file_size(const platform_file* file, u64* size);
 
 /*
     @brief Читает следующую строку из указанного текстового файла.
@@ -71,7 +71,7 @@ API bool platform_file_size(const platform_file* file, u64* size);
     @param out_length Указатель для сохранения количества прочитанных символов (без учета терминатора, может быть nullptr).
     @param true строка успешно прочитана, false ошибка чтения или достигнут конец файла.
 */
-API bool platform_file_read_line(const platform_file* file, u64 buffer_size, char* buffer, u64* out_length);
+CORE_API bool platform_file_read_line(const platform_file* file, u64 buffer_size, char* buffer, u64* out_length);
 
 /*
     @brief Записывает строку текста в файл.
@@ -79,7 +79,7 @@ API bool platform_file_read_line(const platform_file* file, u64 buffer_size, cha
     @param buffer Строка для записи (должна заканчиваться нулевым символом).
     @return true строка успешно записана, false ошибка записи.
 */
-API bool platform_file_write_line(platform_file* file, const char* buffer);
+CORE_API bool platform_file_write_line(platform_file* file, const char* buffer);
 
 /*
     @brief Читает байты данных из файла.
@@ -89,7 +89,7 @@ API bool platform_file_write_line(platform_file* file, const char* buffer);
     @param out_read_size Указатель для сохранения количества фактически прочитанных байт (может быть nullptr).
     @param true данные успешно прочитаны, false ошибка чтения.
 */
-API bool platform_file_read(platform_file* file, u64 data_size, void* data, u64* out_read_size);
+CORE_API bool platform_file_read(platform_file* file, u64 data_size, void* data, u64* out_read_size);
 
 /*
     @brief Записывает байты данных в файл.
@@ -99,4 +99,4 @@ API bool platform_file_read(platform_file* file, u64 data_size, void* data, u64*
     @param data Буфер с данными для записи.
     @param true данные успешно записаны, false ошибка записи.
 */
-API bool platform_file_write(platform_file* file, u64 data_size, const void* data);
+CORE_API bool platform_file_write(platform_file* file, u64 data_size, const void* data);

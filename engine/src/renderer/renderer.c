@@ -16,6 +16,8 @@ typedef struct renderer_system_context {
     void (*backend_resize)(const u32 width, const u32 height);
     bool (*backend_frame_begin)();
     bool (*backend_frame_end)();
+    void (*backend_update_camera)(const mat4* proj, const mat4* view);
+    void (*backend_update_model)(const mat4* model);
 } renderer_system_context;
 
 static renderer_system_context* context = nullptr;
@@ -51,11 +53,13 @@ bool renderer_initialize(renderer_config* config)
     switch(config->backend_type)
     {
         case RENDERER_BACKEND_TYPE_VULKAN:
-            context->backend_initialize  = vulkan_backend_initialize;
-            context->backend_shutdown    = vulkan_backend_shutdown;
-            context->backend_resize      = vulkan_backend_resize;
-            context->backend_frame_begin = vulkan_backend_frame_begin;
-            context->backend_frame_end   = vulkan_backend_frame_end;
+            context->backend_initialize    = vulkan_backend_initialize;
+            context->backend_shutdown      = vulkan_backend_shutdown;
+            context->backend_resize        = vulkan_backend_resize;
+            context->backend_frame_begin   = vulkan_backend_frame_begin;
+            context->backend_frame_end     = vulkan_backend_frame_end;
+            context->backend_update_camera = vulkan_backend_update_camera;
+            context->backend_update_model  = vulkan_backend_update_model;
             break;
         case RENDERER_BACKEND_TYPE_OPENGL:
         case RENDERER_BACKEND_TYPE_DIRECTX:
@@ -92,24 +96,30 @@ bool renderer_system_is_initialized()
 void renderer_on_resize(u32 width, u32 height)
 {
     ASSERT(context != nullptr, "Renderer system should be initialized.");
+
     context->backend_resize(width, height);
 }
 
-bool renderer_draw()
+bool renderer_frame_begin()
 {
     ASSERT(context != nullptr, "Renderer system should be initialized.");
 
-    if(!context->backend_frame_begin())
-    {
-        LOG_DEBUG("Skipping begin frame.");
-        return false;
-    }
+    return context->backend_frame_begin();
+}
 
-    if(!context->backend_frame_end())
-    {
-        LOG_ERROR("Failed to end frame.");
-        return false;
-    }
+bool renderer_frame_end()
+{
+    ASSERT(context != nullptr, "Renderer system should be initialized.");
 
-    return true;
+    return context->backend_frame_end();
+}
+
+void renderer_update_camera(const mat4* proj, const mat4* view)
+{
+    context->backend_update_camera(proj, view);
+}
+
+void renderer_update_model(const mat4* model)
+{
+    context->backend_update_model(model);    
 }

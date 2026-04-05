@@ -182,7 +182,7 @@ bool event_send(event_code code, void* sender, event_context* data)
     return event_handled;
 }
 
-API const char* event_code_to_str(event_code code)
+const char* event_code_to_str(event_code code)
 {
     static const char* strings[] = {
         [EVENT_CODE_APPLICATION_QUIT   ] = "APPLICATION QUIT",
@@ -191,6 +191,7 @@ API const char* event_code_to_str(event_code code)
         [EVENT_CODE_KEYBOARD_KEY       ] = "KEYBOARD KEY",
         [EVENT_CODE_MOUSE_BUTTON       ] = "MOUSE BUTTON",
         [EVENT_CODE_MOUSE_MOVE         ] = "MOUSE MOVE",
+        [EVENT_CODE_MOUSE_MOVE_RELATIVE] = "MOUSE MOVE RELATIVE",
         [EVENT_CODE_MOUSE_WHEEL        ] = "MOUSE WHEEL",
     };
 

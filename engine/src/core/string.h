@@ -131,11 +131,11 @@
     @param str Указатель на строку для копирования. Не может быть nullptr.
     @return Указатель на новую копию строки в памяти, или nullptr в случае ошибки.
 */
-API char* string_duplicate(const char* str);
+CORE_API char* string_duplicate(const char* str);
 
 /*
     @brief Освобождает память, выделенную для строк функциями библиотеки.
     @note Передача nullptr приведет к неопределенному поведению.
     @param str Указатель на строку для освобождения. Не может быть nullptr.
 */
-API void string_free(const char* str);
+CORE_API void string_free(const char* str);

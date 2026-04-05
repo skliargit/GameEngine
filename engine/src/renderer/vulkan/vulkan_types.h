@@ -179,6 +179,10 @@ typedef struct vulkan_shader {
     VkDescriptorSet descriptor_sets[3];
     // @brief Буфер uniform переменных.
     vulkan_buffer uniform_buffer;
+
+    // TODO: Временно!
+    renderer_camera camera;
+    mat4 model;
 } vulkan_shader;
 
 // @brief Основной контекст рендерера.
@@ -236,8 +240,5 @@ typedef struct vulkan_context {
     vulkan_buffer vertex_buffer;
     u64 index_buffer_offset;
     vulkan_buffer index_buffer;
-
-    // TODO: Временно!
-    renderer_camera camera;
 
 } vulkan_context;

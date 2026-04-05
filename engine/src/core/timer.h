@@ -50,13 +50,13 @@ typedef struct timer_format {
     @note Эта функция не начинает отсчет времени.
     @param t Указатель на timer для инициализации.
 */
-API void timer_init(timer* t);
+CORE_API void timer_init(timer* t);
 
 /*
     @brief Запускает или перезапускает отсчет времени таймера.
     @param t Указатель на timer для запуска/перезапуска.
 */
-API void timer_start(timer* t);
+CORE_API void timer_start(timer* t);
 
 /*
     @brief Сбрасывает состояние и сразу же запускает отсчет времени таймера.
@@ -70,28 +70,28 @@ API void timer_start(timer* t);
     @note После остановки можно получить общее время работы таймера см. timer_duration().
     @param t Указатель на timer для остановки.
 */
-API void timer_stop(timer* t);
+CORE_API void timer_stop(timer* t);
 
 /*
     @brief Возвращает время, прошедшее с момента запуска таймера.
     @param t Указатель на timer для получения времени.
     @return Время в секундах с момента запуска таймера, 0 если таймер остановлен.
 */
-API f64 timer_elapsed(const timer* t);
+CORE_API f64 timer_elapsed(const timer* t);
 
 /*
     @brief Возвращает время, прошедшее с последнего вызова timer_delta() или timer_start().
     @param t Указатель на timer для получения времени.
     @return Время в секундах с последнего измерения, 0 если таймер остановлен.
 */
-API f64 timer_delta(timer* t);
+CORE_API f64 timer_delta(timer* t);
 
 /*
     @brief Проверяет, запущен ли в данный момент таймер.
     @param t Указатель на timer для получения статуса.
     @return true если таймер запущен, false в противном случае.
 */
-API bool timer_is_running(const timer* t);
+CORE_API bool timer_is_running(const timer* t);
 
 /*
     @brief Форматирует временной интервал в наиболее подходящие единицы измерения.
@@ -100,4 +100,4 @@ API bool timer_is_running(const timer* t);
     @param time_sec Временной интервал в секундах для форматирования.
     @param out_format Указатель на timer_format, куда будет записан результат.
 */
-API void timer_get_format(f64 time_sec, timer_format* out_format);
+CORE_API void timer_get_format(f64 time_sec, timer_format* out_format);

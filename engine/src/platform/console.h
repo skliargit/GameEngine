@@ -2,8 +2,8 @@
     @file console.h
     @brief Кросс-платформенный интерфейс для работы с консольным выводом.
     @author Дмитрий Скляр.
-    @version 1.1
-    @date 12-09-2025
+    @version 1.2
+    @date 25-02-2026
 
     @license Лицензия Apache, версия 2.0 («Лицензия»);
           Вы не имеете права использовать этот файл без соблюдения условий Лицензии.
@@ -24,94 +24,86 @@
 
 #include <core/defines.h>
 
-// @brief Доступные цвета текста для консольного вывода.
-typedef enum console_color {
-    // @brief Цвет по умолчанию.
-    CONSOLE_COLOR_DEFAULT,
-    // @brief Красный цвет.
-    CONSOLE_COLOR_RED,
-    // @brief Оранжевый цвет.
-    CONSOLE_COLOR_ORANGE,
-    // @brief Зеленый цвет.
-    CONSOLE_COLOR_GREEN,
-    // @brief Желтый цвет.
-    CONSOLE_COLOR_YELLOW,
-    // @brief Синий цвет.
-    CONSOLE_COLOR_BLUE,
-    // @brief Пурпурный цвет.
-    CONSOLE_COLOR_MAGENTA,
-    // @brief Голубой цвет.
-    CONSOLE_COLOR_CYAN,
-    // @brief Белый цвет.
-    CONSOLE_COLOR_WHITE,
-    // @brief Серый цвет.
-    CONSOLE_COLOR_GRAY,
-    // @brief Максимальное количество цветов (не является реальным цветом).
-    CONSOLE_COLOR_COUNT
-} console_color;
-
-// @brief Доступные потоки для консольного вывода.
+/**
+    @brief Доступные потоки для консольного вывода.
+*/
 typedef enum console_stream {
-    // @brief Стандартный поток вывода (stdout).
-    CONSOLE_STREAM_STDOUT,
-    // @brief Стандартный поток ошибок (stderr).
-    CONSOLE_STREAM_STDERR,
-    // @brief Максимальное количество потоков (не является реальным потоком).
-    CONSOLE_STREAM_COUNT
-} console_stream;
+    CONSOLE_STREAM_STDOUT,    /**< Стандартный поток вывода (stdout).                 */
+    CONSOLE_STREAM_STDERR,    /**< Стандартный поток ошибок (stderr).                 */
+    CONSOLE_STREAM_COUNT      /**< Количество потоков (не является реальным потоком). */
+} console_stream_t;
 
-/*
+/**
+    @brief Доступные цвета текста для консольного вывода.
+*/
+typedef enum console_color {
+    CONSOLE_COLOR_DEFAULT,    /**< Цвет по умолчанию.                                 */
+    CONSOLE_COLOR_RED,        /**< Красный цвет.                                      */
+    CONSOLE_COLOR_ORANGE,     /**< Оранжевый цвет.                                    */
+    CONSOLE_COLOR_GREEN,      /**< Зеленый цвет.                                      */
+    CONSOLE_COLOR_YELLOW,     /**< Желтый цвет.                                       */
+    CONSOLE_COLOR_BLUE,       /**< Синий цвет.                                        */
+    CONSOLE_COLOR_MAGENTA,    /**< Пурпурный цвет.                                    */
+    CONSOLE_COLOR_CYAN,       /**< Голубой цвет.                                      */
+    CONSOLE_COLOR_WHITE,      /**< Белый цвет.                                        */
+    CONSOLE_COLOR_GRAY,       /**< Серый цвет.                                        */
+    CONSOLE_COLOR_COUNT       /**< Количество цветов (не является реальным цветом).   */
+} console_color_t;
+
+/**
     @brief Инициализирует подсистему для работы с консолью.
-    @note Должна быть вызвана один раз при старте приложения.
-    @warning Не thread-safe. Должна вызываться из основного потока.
     @return true - инициализация успешна, false - произошла ошибка или консоль недоступна.
-*/
-bool platform_console_initialize();
 
-/*
-    @brief Завершает работу подсистемы для работы с консолью.
-    @note Должна быть вызвана при завершении приложения.
     @warning Не thread-safe. Должна вызываться из основного потока.
+    @note Должна быть вызвана один раз при старте приложения.
 */
-void platform_console_shutdown();
+bool platform_console_initialize(void);
 
-/*
+/**
+    @brief Завершает работу подсистемы для работы с консолью.
+
+    @warning Не thread-safe. Должна вызываться из основного потока.
+    @note Должна быть вызвана при завершении приложения.
+*/
+void platform_console_shutdown(void);
+
+/**
     @brief Проверяет, была ли инициализирована подсистема работы с консолью.
-    @note Может использоваться для проверки состояния подсистемы перед вызовом других функций.
-    @warning Не thread-safe. Должна вызываться из того же потока, что и инициализация/завершение.
     @return true - подсистема инициализирована и готова к работе, false - подсистема не инициализирована.
+
+    @warning Не thread-safe. Должна вызываться из того же потока, что и инициализация/завершение.
+    @note Может использоваться для проверки состояния подсистемы перед вызовом других функций.
 */
-API bool platform_console_is_initialized();
+CORE_API bool platform_console_is_initialized(void);
 
-// TODO:
-// API void platform_console_get_resolution(u32* width, u32* height);
-// API void platfrom_console_set_cursor(u32 x, u32 y);
-// API void platform_console_set_color(console_color color);
-// API void platform_console_clear();
-// API void platform_console_write(console_srteam stream, const char* messgae);
-// API void platform_console_writef(console_stream stream, const char* format, ...);
+/**
+    @brief Выводит сообщение в заданный стандартный поток.
+    @param stream Тип стандартного потока.
+    @param color Цвет сообщения.
+    @param message Строка или указатель на строку сообщения, не может быть nullptr.
 
-/*
-    @brief Выводит сообщение в заданный стандартный поток с заданным цветом.
     @warning Не thread-safe. Клиентский код должен обеспечить синхронизацию при использовании из нескольких потоков.
-    @param stream Поток вывода (stdout/stderr).
-    @param color Цвет которым будет выведено сообщение.
-    @param message Сообщение которое будет напечатано.
 */
-API void platform_console_write(console_stream stream, console_color color, const char* message);
+CORE_API void platform_console_write(console_stream_t stream, console_color_t color, const char* message);
 
-/*
-    @brief Выводит сообщение в стандартный поток вывода c заданным цветом.
-    @warning Не thread-safe. Клиентский код должен обеспечить синхронизацию при использовании из нескольких потоков.
-    @param color Цвет которым будет выведено сообщение.
-    @param message Сообщение которое будет напечатано.
-*/
-#define platform_console_write_stdout(color, message) platform_console_write(CONSOLE_STREAM_STDOUT, color, message)
+/**
+    @brief Выводит форматируемое сообщение со списком аргументов в заданный стандартный поток.
+    @param stream Тип стандартного потока.
+    @param color Цвет сообщения.
+    @param format Строка или указатель на строку форматируемого сообшения, не может быть nullptr.
+    @param ... Список аргументов форматируемого сообщения.
 
-/*
-    @brief Выводит сообщение в стандартный поток ошибок c заданным цветом.
     @warning Не thread-safe. Клиентский код должен обеспечить синхронизацию при использовании из нескольких потоков.
-    @param color Цвет которым будет выведено сообщение.
-    @param message Сообщение которое будет напечатано.
 */
-#define platform_console_write_stderr(color, message) platform_console_write(CONSOLE_STREAM_STDERR, color, message)
+CORE_API void platform_console_writef(console_stream_t stream, console_color_t color, const char* format, ...);
+
+/**
+    @brief Выводит форматируемое сообщение с указателем на список аргументов в заданный стандартный поток.
+    @param stream Тип стандартного потока.
+    @param color Цвет сообщения.
+    @param format Строка или указатель на строку форматируемого сообшения, не может быть nullptr.
+    @param args Указатель на список аргументов форматируемого сообщения, не может быть nullptr.
+
+    @warning Не thread-safe. Клиентский код должен обеспечить синхронизацию при использовании из нескольких потоков.
+*/
+CORE_API void platform_console_writefv(console_stream_t stream, console_color_t color, const char* format, void* args);

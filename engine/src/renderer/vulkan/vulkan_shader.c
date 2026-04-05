@@ -181,15 +181,23 @@ bool vulkan_shader_create(vulkan_context* context, vulkan_shader* out_shader)
         return false;
     }
 
-    // TODO: Push константы конвейера.
+    // Push константы конвейера.
+    VkPushConstantRange push_constants[] = {
+        // Матрица модели.
+        {
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .offset     = 0,
+            .size       = sizeof(mat4)
+        }
+    };
 
     // Макет конвейера, описывающий размещение (привязки) дескрипторных наборов и push-констант.
     VkPipelineLayoutCreateInfo pipeline_layout_info = {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
         .setLayoutCount         = 1,                                   // TODO: Настраиваемый.
         .pSetLayouts            = &out_shader->descriptor_set_layout,  // TODO: Настраиваемый.
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges    = nullptr
+        .pushConstantRangeCount = ARRAY_SIZE(push_constants),          // TODO: Настраиваемый.
+        .pPushConstantRanges    = push_constants                       // TODO: Настраиваемый.
     };
 
     result = vkCreatePipelineLayout(context->device.logical, &pipeline_layout_info, context->allocator, &out_shader->pipeline_layout);
@@ -487,4 +495,12 @@ void vulkan_shader_update_camera(vulkan_context* context, vulkan_shader* shader,
 
     // Привязка набора дескрипторов к размещению для обновления.
     vkCmdBindDescriptorSets(cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, shader->pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
+}
+
+void vulkan_shader_update_model(vulkan_context* context, vulkan_shader* shader, mat4* model)
+{
+    u32 current_frame = context->swapchain.current_frame;
+    VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
+
+    vkCmdPushConstants(cmdbuf, shader->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(mat4), model);
 }

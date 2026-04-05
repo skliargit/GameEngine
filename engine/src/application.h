@@ -93,7 +93,7 @@ typedef struct application_config {
     // @brief Начальная конфигурация окна приложения.
     struct {
         // @brief Тип бэкенда оконной системы.
-        platform_window_backend_type backend_type;
+        platform_window_backend_t backend_type;
         // @brief Заголовок окна.
         const char* title;
         // @brief Начальная ширина окна в пикселях.
@@ -120,34 +120,49 @@ typedef struct application_config {
     application_render_callback render;
 } application_config;
 
+/**
+    @brief Режимы работы курсора мыши.
+*/
+typedef enum {
+    CURSOR_MODE_NORMAL,               /**< @brief Режим по умолчанию - курсор виден и не ограничен.                     */
+    CURSOR_MODE_HIDDEN,               /**< @brief Курсор скрыт при нахождении над окном, но продолжает перемещаться.    */
+    CURSOR_MODE_DISABLE,              /**< @brief Курсор скрыт и заблокирован (относительные перемещения только).       */
+    CURSOR_MODE_COUNT                 /**< @brief Количество режимов курсора (не является реальным режимом).            */
+} cursor_mode_t;
+
 /*
     @brief Инициализирует приложение с указанной конфигурацией.
     @note Функция должна быть вызвана перед application_run().
     @param config Указатель на структуру конфигурации приложения.
     @return true если приложение успешно создано, иначе false.
 */
-API bool application_initialize(const application_config* config);
+CORE_API bool application_initialize(const application_config* config);
 
 /*
     @brief Запускает главный цикл приложения.
     @note Функция блокирует выполнение до завершения работы приложения.
     @return true если выполнение завершено успешно, false в случае ошибки.
 */
-API bool application_run();
+CORE_API bool application_run();
 
 /*
     @brief Запрашивает корректное завершение работы приложения.
 */
-API void application_quit();
+CORE_API void application_quit();
 
 /*
     @brief Немедленно останавливает работу приложения и освобождает все возможные ресурсы.
     @warning Используйте эту функцию только в исключительных ситуациях (критические ошибки).
 */
-API void application_terminate();
+CORE_API void application_terminate();
 
 /*
     @brief Возвращает копию структуры со статистикой производительности за последний кадр.
     @return Структура application_frame_stats, содержащая актуальные метрики производительности.
 */
-API application_frame_stats application_get_frame_stats();
+CORE_API application_frame_stats application_get_frame_stats();
+
+/*
+    @brief Блокирует курсор в окне.
+*/
+CORE_API void application_set_cursor_lock(bool locked);

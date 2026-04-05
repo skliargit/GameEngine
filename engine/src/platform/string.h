@@ -30,7 +30,7 @@
     @param str Указатель на нуль-терминированную строку.
     @return Количество символов в строке.
 */
-API u64 platform_string_length(const char* str);
+CORE_API u64 platform_string_length(const char* str);
 
 /*
     @brief Форматирует строку с использованием указателя на списк аргументов переменной длины.
@@ -44,7 +44,7 @@ API u64 platform_string_length(const char* str);
             или необходимый размер буфера при length == 0.
             Возвращает -1 в случае ошибки форматирования.
 */
-API i32 platform_string_format_va(char* dst, u64 length, const char* format, void* args);
+CORE_API i32 platform_string_format_va(char* dst, u64 length, const char* format, void* args);
 
 /*
     @brief Форматирует строку с использованием списка аргументов переменной длины.
@@ -58,7 +58,7 @@ API i32 platform_string_format_va(char* dst, u64 length, const char* format, voi
             или необходимый размер буфера при length == 0.
             Возвращает -1 в случае ошибки форматирования.
 */
-API i32 platform_string_format(char* dst, u64 length, const char* format, ...);
+CORE_API i32 platform_string_format(char* dst, u64 length, const char* format, ...);
 
 /*
     @brief Сравнивает две нуль-терминированные строки с учетом регистра.
@@ -67,7 +67,7 @@ API i32 platform_string_format(char* dst, u64 length, const char* format, ...);
     @param rstr Указатель на вторую строку (должна быть валидной).
     @return true если строки идентичны, false если различны или переданы nullptr указатели.
 */
-API bool platform_string_equal(const char* lstr, const char* rstr);
+CORE_API bool platform_string_equal(const char* lstr, const char* rstr);
 
 /*
     @brief Сравнивает две нуль-терминированные строки без учета регистра.
@@ -76,7 +76,7 @@ API bool platform_string_equal(const char* lstr, const char* rstr);
     @param rstr Указатель на вторую строку (должна быть валидной).
     @return true если строки идентичны (игнорируя регистр), false если различны или переданы nullptr указатели.
 */
-API bool platform_string_equali(const char* lstr, const char* rstr);
+CORE_API bool platform_string_equali(const char* lstr, const char* rstr);
 
 /*
     @brief Сравнивает первые N символов двух строк с учетом регистра.
@@ -86,7 +86,7 @@ API bool platform_string_equali(const char* lstr, const char* rstr);
     @param length Количество символов для сравнения, если length = 0, строки считаются равными.
     @return true если указанные части строк идентичны, false если различны или переданы nullptr указатели.
 */
-API bool platform_string_nequal(const char* lstr, const char* rstr, u64 length);
+CORE_API bool platform_string_nequal(const char* lstr, const char* rstr, u64 length);
 
 /*
     @brief Сравнивает первые N символов двух строк без учета регистра.
@@ -96,7 +96,7 @@ API bool platform_string_nequal(const char* lstr, const char* rstr, u64 length);
     @param length Количество символов для сравнения, если length = 0, строки считаются равными.
     @return true если указанные части строк идентичны (игнорируя регистр), false если различны или переданы nullptr указатели.
 */
-API bool platform_string_nequali(const char* lstr, const char* rstr, u64 length);
+CORE_API bool platform_string_nequali(const char* lstr, const char* rstr, u64 length);
 
 /*
     @brief Копирует нуль-терминированную строку.
@@ -106,7 +106,7 @@ API bool platform_string_nequali(const char* lstr, const char* rstr, u64 length)
     @param src Указатель на строку-источник.
     @return Указатель на буфер назначения (dest).
 */
-API char* platform_string_copy(char* dst, const char* src);
+CORE_API char* platform_string_copy(char* dst, const char* src);
 
 /*
     @brief Копирует не более N символов строки и добавляет нуль терминатор.
@@ -117,4 +117,4 @@ API char* platform_string_copy(char* dst, const char* src);
     @param length Максимальное количество символов для копирования (включая нуль-терминатор).
     @return Указатель на буфер назначения (dest).
 */
-API char* platform_string_ncopy(char* dst, const char* src, u64 length);
+CORE_API char* platform_string_ncopy(char* dst, const char* src, u64 length);

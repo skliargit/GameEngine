@@ -5,12 +5,12 @@
     #include "core/logger.h"
     #include "core/string.h"
     #include "core/memory.h"
+    #include <stdlib.h>
     #include <xcb/xcb.h>
+    #include <xcb/xinput.h>
     #include <vulkan/vulkan.h>
     #include <vulkan/vulkan_xcb.h>
-    #include <xkbcommon/xkbcommon.h>
     #include <xkbcommon/xkbcommon-x11.h>
-    #include <stdlib.h>
 
     // Для включения отладки оконной системы индивидуально.
     #ifndef DEBUG_PLATFORM_FLAG
@@ -29,6 +29,8 @@
         xcb_screen_t* screen;
         // Атом для обработки закрытия окна.
         xcb_atom_t wm_delete;
+        // Невидимый курсор (НАСЛЕДУЕТСЯ).
+        xcb_cursor_t cursor_invisible;
         // Текущий заголовок окна.
         char* title;
         // Текущая ширина окна в пикселях.
@@ -43,20 +45,8 @@
         bool resize_pending;
         // Фокус ввода на этом окне.
         bool focused;
-        // Callback-функция, вызываемая при попытке закрытия окна, может быть nullptr.
-        platform_window_on_close_callback on_close;
-        // Callback-функция, вызываемая при изменении размера окна, может быть nullptr.
-        platform_window_on_resize_callback on_resize;
-        // Callback-функция, вызываемая при изменении состояния фокуса окна, может быть nullptr.
-        platform_window_on_focus_callback on_focus;
-        // Callback-функция для обработки нажатий и отпусканий клавиш клавиатуры, может быть nullptr.
-        platform_window_on_key_callback on_key;
-        // Callback-функция для обработки нажатий кнопок мыши, может быть nullptr.
-        platform_window_on_mouse_button_callback on_mouse_button;
-        // Callback-функция для обработки движения курсора мыши в пределах окна, может быть nullptr.
-        platform_window_on_mouse_move_callback on_mouse_move;
-        // Callback-функция для обработки прокрутки колеса мыши, может быть nullptr.
-        platform_window_on_mouse_wheel_callback on_mouse_wheel;
+        // Зарегестрированные слушатели событий (по одному на событие).
+        platform_window_event_listener_t event_listeners[PLATFORM_WINDOW_EVENT_COUNT];
     } platform_window;
 
     typedef struct xcb_client {
@@ -72,6 +62,14 @@
         struct xkb_state* xkbstate;
         // ID основной клавиатуры.
         i32 xkbdevice_id;
+        // Невидимый курсор.
+        xcb_cursor_t cursor_invisible;
+        // Код операции расширения XInput.
+        u8 xi_opcode;
+        // Доступно ли расширение.
+        bool xi_available;
+        // Версия XInput (должна быть >= 2.0).
+        i32 xi_major_version, xi_minor_version;
         // TODO: Окно с текущим фокусом ввода.
         platform_window* focused_window;
         // TODO: Динамический массив всех окон (пока только одно окно).
@@ -99,7 +97,6 @@
             LOG_ERROR("Failed to connect to X server.");
             return false;
         }
-        LOG_TRACE("Connected to X server.");
 
         // Получение первого экрана.
         client->screen = get_screen(client->connection, 0);
@@ -157,6 +154,42 @@
             return false;
         }
 
+        // Запрос версии расширения XInput.
+        const xcb_query_extension_reply_t* xi_ext = xcb_get_extension_data(client->connection, &xcb_input_id);
+        if(!xi_ext || !xi_ext->present)
+        {
+            LOG_WARN("XInput extension not available, raw input disabled.");
+            client->xi_available = false;
+        }
+        else
+        {
+            client->xi_opcode = xi_ext->major_opcode;
+
+            // Проверка версии XInput (нужна >= 2.0).
+            xcb_input_xi_query_version_cookie_t ver_cookie = xcb_input_xi_query_version(client->connection, 2, 0);
+            xcb_input_xi_query_version_reply_t* ver_reply = xcb_input_xi_query_version_reply(client->connection, ver_cookie, nullptr);
+            if(ver_reply)
+            {
+                client->xi_major_version = ver_reply->major_version;
+                client->xi_minor_version = ver_reply->minor_version;
+                client->xi_available = true;
+                LOG_TRACE("XInput version %d.%d initialized.", client->xi_major_version, client->xi_minor_version);
+                free(ver_reply);
+            }
+            else
+            {
+                LOG_WARN("Failed to query XInput version, raw input disabled.");
+                client->xi_available = false;
+            }
+        }
+
+        // Создание невидимого курсора.
+        xcb_pixmap_t pixmap = xcb_generate_id(client->connection);
+        client->cursor_invisible = xcb_generate_id(client->connection);
+        xcb_create_pixmap(client->connection, 1, pixmap, client->screen->root, 1, 1);
+        xcb_create_cursor(client->connection, client->cursor_invisible, pixmap, pixmap, 0, 0, 0, 0, 0, 0, 0, 0);
+        xcb_free_pixmap(client->connection, pixmap);
+
         LOG_TRACE("XCB backend initialized successfully.");
         client->window = nullptr;
         return true;
@@ -166,13 +199,11 @@
     {
         xcb_client* client = internal_data;
 
-        LOG_TRACE("Disconnecting from X server...");
-
         // Уничтожение всех окон (пока только одно окно).
         if(client->window)
         {
             LOG_WARN("Window was not properly destroyed before shutdown.");
-            xcb_backend_window_destroy(client->window, client);
+            xcb_window_destroy(client->window, client);
             // NOTE: Осовобождение client->window в xcb_backend_window_destroy().
         }
 
@@ -284,12 +315,12 @@
     {
         // Таблица трансляции xcb scancode -> virtual button code.
         static const mouse_button codes[] = {
-            [0x01] = BTN_LEFT, [0x02] = BTN_MIDDLE, [0x03] = BTN_RIGHT, [0x08] = BTN_BACKWARD, [0x09] = BTN_FORWARD
+            [0x01] = BUTTON_LEFT, [0x02] = BUTTON_MIDDLE, [0x03] = BUTTON_RIGHT, [0x08] = BUTTON_BACKWARD, [0x09] = BUTTON_FORWARD
         };
 
         if(scancode >= ARRAY_SIZE(codes))
         {
-            return BTN_UNKNOWN;
+            return BUTTON_UNKNOWN;
         }
 
         return codes[scancode];
@@ -297,8 +328,9 @@
 
     bool xcb_backend_poll_events(void* internal_data)
     {
-        xcb_client* client = internal_data;
         xcb_generic_event_t* event;
+        xcb_client* client = internal_data;
+        platform_window* window = client->window; // TODO: Текущее окно.
 
         while((event = xcb_poll_for_event(client->connection)))
         {
@@ -309,134 +341,214 @@
             {
                 // Обработка клавиш клавиатуры.
                 case XCB_KEY_PRESS:
-                case XCB_KEY_RELEASE:
-                {
+                case XCB_KEY_RELEASE: {
                     xcb_key_press_event_t* keyboard = (xcb_key_press_event_t*)event;
                     xkb_keysym_t keysym = xkb_state_key_get_one_sym(client->xkbstate, keyboard->detail);
-                    bool state = keyboard->response_type == XCB_KEY_PRESS;
+                    bool vkey_state = keyboard->response_type == XCB_KEY_PRESS;
                     keyboard_key vkey = translate_key(keysym);
 
                     if(vkey == KEY_UNKNOWN)
                     {
-                        LOG_WARN("Keyboard key event: unknown keysym=0x%x (%d), state=%d.", keysym, keysym, state);
+                        LOG_WARN("Keyboard key event: unknown keysym=0x%x (%d), state=%d.", keysym, keysym, vkey_state);
                         break;
                     }
 
-                    LOG_TRACE("Keyboard key event: keysym=0x%x (%d), state=%d, window='%s'.", keysym, keysym, state, client->window->title);
-                    if(client->window->on_key)
+                    // Вызов обработчика окна.
+                    platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_KEYBOARD_KEY];
+                    if(listener->callback != nullptr)
                     {
-                        client->window->on_key(vkey, state);
+                        platform_window_event_context_t context = {
+                            .type                 = PLATFORM_WINDOW_EVENT_KEYBOARD_KEY,
+                            .user_data            = listener->user_data,
+                            .window               = window,
+                            .keyboard_key.code    = vkey,
+                            .keyboard_key.state   = vkey_state
+                        };
+
+                        listener->callback(&context);
                     }
                 } break;
 
                 // Обработка изменения раскладки клавиатуры.
-                case XCB_MAPPING_NOTIFY:
-                {
+                case XCB_MAPPING_NOTIFY: {
                 } break;
 
                 // Обработка кнопок мыши.
-                case XCB_BUTTON_PRESS:
-                {
+                case XCB_BUTTON_PRESS: {
                     xcb_button_press_event_t* mouse = (xcb_button_press_event_t*)event;
 
-                    // Проверка на вертикальную и горизонтальную прокрутку.
-                    if(client->window->on_mouse_wheel)
+                    // Вызов обработчика окна.
+                    platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_MOUSE_WHEEL];
+                    if(listener->callback != nullptr)
                     {
-                        if(mouse->detail == 4)
-                        {
-                            client->window->on_mouse_wheel(1, 0);
-                            break;
-                        }
-                        else if(mouse->detail == 5)
-                        {
-                            client->window->on_mouse_wheel(-1, 0);
-                            break;
-                        }
-                        else if(mouse->detail == 6)
-                        {
-                            client->window->on_mouse_wheel(0, -1);
-                            break;
-                        }
-                        else if(mouse->detail == 7)
-                        {
-                            client->window->on_mouse_wheel(0, 1);
-                            break;
-                        }
+                        i32 delta_vert = (mouse->detail == 4) ? 1 : (mouse->detail == 5) ? -1 : 0;
+                        i32 delta_horz = (mouse->detail == 7) ? 1 : (mouse->detail == 6) ? -1 : 0;
+
+                        platform_window_event_context_t context = {
+                            .type                   = PLATFORM_WINDOW_EVENT_MOUSE_WHEEL,
+                            .user_data              = listener->user_data,
+                            .window                 = window,
+                            .mouse_wheel.delta_vert = delta_vert,
+                            .mouse_wheel.delta_horz = delta_horz
+                        };
+
+                        listener->callback(&context);
                     }
                 }
-                case XCB_BUTTON_RELEASE:
-                {
+
+                case XCB_BUTTON_RELEASE: {
                     xcb_button_press_event_t* mouse = (xcb_button_press_event_t*)event;
-                    bool state = mouse->response_type == XCB_BUTTON_PRESS;
+                    bool vbutton_state = mouse->response_type == XCB_BUTTON_PRESS;
 
                     // Проверка кнопок мыши.
                     mouse_button vbutton = translate_button(mouse->detail);
-                    if(vbutton == BTN_UNKNOWN)
+                    if(vbutton == BUTTON_UNKNOWN)
                     {
                         LOG_TRACE("Mouse button event: unknown scancode=0x%x (%hhu), state=%d.",
-                            mouse->detail, mouse->detail, state
+                            mouse->detail, mouse->detail, vbutton_state
                         );
                         break;
                     }
 
-                    LOG_TRACE("Mouse button event: scancode=0x%x (%hhu), state=%d, window='%s'.",
-                        mouse->detail, mouse->detail, state, client->window->title
-                    );
-                    if(client->window->on_mouse_button)
+                    // Вызов обработчика окна.
+                    platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_MOUSE_BUTTON];
+                    if(listener->callback != nullptr)
                     {
-                        client->window->on_mouse_button(vbutton, state);
+                        platform_window_event_context_t context = {
+                            .type                 = PLATFORM_WINDOW_EVENT_MOUSE_BUTTON,
+                            .user_data            = listener->user_data,
+                            .window               = window,
+                            .mouse_button.code    = vbutton,
+                            .mouse_button.state   = vbutton_state
+                        };
+
+                        listener->callback(&context);
+                    }
+                } break;
+
+                // Обработка относительного положения курсора (аналог wayland: pt_motion_relative).
+                case XCB_GE_GENERIC: {
+                    xcb_ge_generic_event_t* ge_event = (xcb_ge_generic_event_t*)event;
+                    if(ge_event->extension == client->xi_opcode && ge_event->event_type == XCB_INPUT_RAW_MOTION)
+                    {
+                        xcb_input_raw_motion_event_t* raw = (xcb_input_raw_motion_event_t*)event;
+
+                        // Указатель на маску (идет сразу после фиксированных полей структуры).
+                        u32* axis_mask = (u32*)(raw + 1);
+
+                        // Получение указателя на значения осей (идут сразу после маски).
+                        xcb_input_fp3232_t* axis_values = (xcb_input_fp3232_t*)(axis_mask + raw->valuators_len);
+
+                        // Переменные для хранения сырых значений.
+                        i32 dx_unaccel = 0, dy_unaccel = 0, v_index = 0;
+
+                        // Проход по всем возможным осям (обычно ось X = 0, ось Y = 1).
+                        if(raw->valuators_len > 0)
+                        {
+                            if(axis_mask[0] & (1 << 0))
+                            {
+                                dx_unaccel = axis_values[v_index].integral;
+                                v_index++;
+                            }
+
+                            if(axis_mask[0] & (1 << 1))
+                            {
+                                dy_unaccel = axis_values[v_index].integral;
+                            }
+                        }
+
+                        platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_MOUSE_MOVE_RELATIVE];
+                        if(listener->callback != nullptr)
+                        {
+                            // Вызов обработчика окна для относительного смещения указателя.
+                            platform_window_event_context_t context = {
+                                .type                   = PLATFORM_WINDOW_EVENT_MOUSE_MOVE_RELATIVE,
+                                .user_data              = listener->user_data,
+                                .window                 = window,
+                                .mouse_move_relative.dx = dx_unaccel,
+                                .mouse_move_relative.dy = dy_unaccel
+                            };
+
+                            listener->callback(&context);
+                        }
                     }
                 } break;
 
                 // Обработка положения указателя.
-                case XCB_MOTION_NOTIFY:
-                {
+                case XCB_MOTION_NOTIFY: {
                     xcb_motion_notify_event_t* mouse = (xcb_motion_notify_event_t*)event;
 
-                    // LOG_TRACE("Motion event to %hdx%hd for '%s' window.", mouse->event_x, mouse->event_y, client->window->title);
-                    if(client->window->on_mouse_move)
+                    platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_MOUSE_MOVE];
+                    if(listener->callback != nullptr)
                     {
-                        client->window->on_mouse_move((i32)mouse->event_x, (i32)mouse->event_y);
+                        // Вызов обработчика абсолютных координат указателя, только если курсор не заблокирован!
+                        platform_window_event_context_t context = {
+                            .type                   = PLATFORM_WINDOW_EVENT_MOUSE_MOVE,
+                            .user_data              = listener->user_data,
+                            .window                 = window,
+                            .mouse_move.to_x        = CAST_I32(mouse->event_x),
+                            .mouse_move.to_y        = CAST_I32(mouse->event_y)
+                        };
+
+                        listener->callback(&context);
                     }
                 } break;
 
                 // Обработка изменения размера окна.
-                case XCB_CONFIGURE_NOTIFY:
-                {
+                case XCB_CONFIGURE_NOTIFY: {
                     xcb_configure_notify_event_t* e = (xcb_configure_notify_event_t*)event;
-                    if(client->window->width != e->width || client->window->height != e->height)
+                    if(window->width != e->width || window->height != e->height)
                     {
-                        client->window->width_pending  = (u32)e->width;
-                        client->window->height_pending = (u32)e->height;
-                        client->window->resize_pending = true;
-                        LOG_TRACE("Window resize pending: %hux%hu.", e->width, e->height);
+                        window->width_pending  = CAST_U32(e->width);
+                        window->height_pending = CAST_U32(e->height);
+                        window->resize_pending = true;
+
+                        // Вызов обработчика окна.
+                        platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_RESIZE];
+                        if(listener->callback != nullptr)
+                        {
+                            platform_window_event_context_t context = {
+                                .type                    = PLATFORM_WINDOW_EVENT_RESIZE,
+                                .user_data               = listener->user_data,
+                                .window                  = window,
+                                .window_resize.state     = window->resize_pending,
+                                .window_resize.to_width  = window->width_pending,
+                                .window_resize.to_height = window->height_pending
+                            };
+
+                            listener->callback(&context);
+                        }
                     }
                 } break;
 
                 // Обработка перерисовки окна.
-                case XCB_EXPOSE:
-                {
-                    if(client->window->resize_pending)
+                case XCB_EXPOSE: {
+                    if(window->resize_pending)
                     {
-                        LOG_TRACE("Resize event: window='%s' to %ux%u.",
-                            client->window->title, client->window->width_pending, client->window->height_pending
-                        );
+                        window->resize_pending = false;
+                        window->width  = window->width_pending;
+                        window->height = window->height_pending;
 
-                        // Вызов обработчика изменения размера буфера.
-                        if(client->window->on_resize)
+                        // Вызов обработчика окна.
+                        platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_RESIZE];
+                        if(listener->callback != nullptr)
                         {
-                            client->window->on_resize(client->window->width_pending, client->window->height_pending);
-                        }
+                            platform_window_event_context_t context = {
+                                .type                    = PLATFORM_WINDOW_EVENT_RESIZE,
+                                .user_data               = listener->user_data,
+                                .window                  = window,
+                                .window_resize.state     = window->resize_pending,
+                                .window_resize.to_width  = window->width,
+                                .window_resize.to_height = window->height
+                            };
 
-                        client->window->width = client->window->width_pending;
-                        client->window->height = client->window->height_pending;
-                        client->window->resize_pending = false;
+                            listener->callback(&context);
+                        }
                     }
                 } break;
 
                 // Обработка события фокуса окна.
-                case XCB_ENTER_NOTIFY:
-                {
+                case XCB_ENTER_NOTIFY: {
                     // TODO: Найти окно которому принадлежит id!
                     // xcb_enter_notify_event_t* e = (xcb_enter_notify_event_t*)event;
                     // if(client->window->id == e->event)
@@ -445,15 +557,22 @@
                     //     client->window->focused = true;
                     // }
 
-                    LOG_TRACE("Window '%s' focused.", client->window->title);
-                    if(client->window->on_focus)
+                    // Вызов обработчика окна.
+                    platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_FOCUS];
+                    if(listener->callback != nullptr)
                     {
-                        client->window->on_focus(true);
+                        platform_window_event_context_t context = {
+                            .type                 = PLATFORM_WINDOW_EVENT_FOCUS,
+                            .user_data            = listener->user_data,
+                            .window               = window,
+                            .window_focus.state   = true
+                        };
+
+                        listener->callback(&context);
                     }
                 } break;
 
-                case XCB_LEAVE_NOTIFY:
-                {
+                case XCB_LEAVE_NOTIFY: {
                     // TODO: Найти окно которому принадлежит id!
                     // xcb_enter_notify_event_t* e = (xcb_enter_notify_event_t*)event;
                     // if(client->window->id == e->event)
@@ -465,29 +584,41 @@
                     //     }
                     // }
 
-                    LOG_TRACE("Window '%s' lost focus.", client->window->title);
-                    if(client->window->on_focus)
+                    // Вызов обработчика окна.
+                    platform_window_event_listener_t* listener = &window->event_listeners[PLATFORM_WINDOW_EVENT_FOCUS];
+                    if(listener->callback != nullptr)
                     {
-                        client->window->on_focus(false);
+                        platform_window_event_context_t context = {
+                            .type                 = PLATFORM_WINDOW_EVENT_FOCUS,
+                            .user_data            = listener->user_data,
+                            .window               = window,
+                            .window_focus.state   = false
+                        };
+
+                        listener->callback(&context);
                     }
                 } break;
 
                 // Обработка запроса о закрытии окна.
-                case XCB_CLIENT_MESSAGE:
-                {
+                case XCB_CLIENT_MESSAGE: {
                     xcb_client_message_event_t* e = (xcb_client_message_event_t*)event;
 
-                    LOG_TRACE("Close event for window '%s'.", client->window->title);
-                    if(client->window->on_close && e->data.data32[0] == client->window->wm_delete)
+                    // Вызов обработчика окна.
+                    platform_window_event_listener_t* listener = &client->window->event_listeners[PLATFORM_WINDOW_EVENT_SHOULD_CLOSE];
+                    if(listener->callback != nullptr && e->data.data32[0] == client->window->wm_delete)
                     {
-                        client->window->on_close();
-                    }
+                        platform_window_event_context_t context = {
+                            .type      = PLATFORM_WINDOW_EVENT_SHOULD_CLOSE,
+                            .user_data = listener->user_data,
+                            .window    = client->window,
+                        };
 
+                        listener->callback(&context);
+                    }
                 } break;
 
                 // Обработка появления окна.
-                case XCB_MAP_NOTIFY:
-                {
+                case XCB_MAP_NOTIFY: {
                 } break;
 
                 // Обработка неизвестных событий.
@@ -518,11 +649,9 @@
         return sizeof(xcb_client);
     }
 
-    platform_window* xcb_backend_window_create(const platform_window_config* config, void* internal_data)
+    platform_window* xcb_window_create(const platform_window_config_t* config, void* internal_data)
     {
         xcb_client* client = internal_data;
-
-        LOG_TRACE("Creating window '%s' (size: %ux%u)...", config->title, config->width, config->height);
 
         if(client->window)
         {
@@ -538,22 +667,17 @@
 
         platform_window* window = mallocate(sizeof(platform_window), MEMORY_TAG_APPLICATION);
         mzero(window, sizeof(platform_window));
-        window->connection = client->connection;
-        window->screen = client->screen;
-        window->title = string_duplicate(config->title);
-        window->width = config->width;
-        window->height = config->height;
-        window->on_close = config->on_close;
-        window->on_resize = config->on_resize;
-        window->on_focus = config->on_focus;
-        window->on_key = config->on_key;
-        window->on_mouse_button = config->on_mouse_button;
-        window->on_mouse_move = config->on_mouse_move;
-        window->on_mouse_wheel = config->on_mouse_wheel;
+        *window = (platform_window){
+            .connection       = client->connection,
+            .screen           = client->screen,
+            .cursor_invisible = client->cursor_invisible,
+            .title            = string_duplicate(config->title),
+            .width            = config->width,
+            .height           = config->height,
+        };
 
         // Генерация ID для нового окна.
         window->window = xcb_generate_id(client->connection);
-        LOG_TRACE("XCB window ID: %u.", window->window);
 
         // Настройка событий окна.
         u32 value_mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK;                // Установка фона и событий для окна.
@@ -609,7 +733,7 @@
             if(replies[1]) free(replies[1]);
 
             LOG_ERROR("Failed to get WM protocol atoms.");
-            xcb_backend_window_destroy(window, client);
+            xcb_window_destroy(window, client);
             return nullptr;
         }
 
@@ -627,12 +751,32 @@
         // Сохранение атома(числа) для дальнейшего использования.
         window->wm_delete = wm_delete;
 
+        // Настройка получения сырых данных ввода мышки.
+        if(client->xi_available)
+        {
+            // Временная структура для маски.
+            typedef struct {
+                xcb_input_event_mask_t head;
+                u32 mask;
+            } event_mask;
+            
+            // Создание маски для сырых данных мыши.
+            event_mask raw_event_mask = {
+                .head.deviceid = XCB_INPUT_DEVICE_ALL_MASTER,
+                .head.mask_len = 1,
+                .mask = XCB_INPUT_XI_EVENT_MASK_RAW_MOTION
+            };
+
+            // Выбираем события для окна.
+            xcb_input_xi_select_events(client->connection, client->screen->root, 1, &raw_event_mask.head);
+        }
+
         // Показать окно.
         xcb_map_window(client->connection, window->window);
         if(xcb_flush(client->connection) <= 0)
         {
             LOG_ERROR("Failed to flush XCB connection (server disconnected).");
-            xcb_backend_window_destroy(window, client);
+            xcb_window_destroy(window, client);
             return false;
         }
 
@@ -642,7 +786,7 @@
         return client->window;
     }
 
-    void xcb_backend_window_destroy(platform_window* window, void* internal_data)
+    void xcb_window_destroy(platform_window* window, void* internal_data)
     {
         xcb_client* client = internal_data;
 
@@ -659,18 +803,66 @@
         LOG_TRACE("Window destroy complete.");
     }
 
-    const char* xcb_backend_window_get_title(platform_window* window)
+    const char* xcb_window_get_title(platform_window* window)
     {
         return window->title;
     }
 
-    void xcb_backend_window_get_resolution(platform_window* window, u32* width, u32* height)
+    void xcb_window_get_resolution(platform_window* window, u32* width, u32* height)
     {
         *width = window->width;
         *height = window->height;
     }
 
-    void xcb_backend_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
+    void xcb_window_set_event_callback(platform_window* window, platform_window_event_t event, platform_window_event_callback callback, void* user_data)
+    {
+        window->event_listeners[event] = (platform_window_event_listener_t){
+            .callback  = callback,
+            .user_data = user_data
+        };
+    }
+
+    void xcb_window_hide_cursor(platform_window_t* window)
+    {
+        u32 val[] = { window->cursor_invisible };
+        xcb_change_window_attributes(window->connection, window->window, XCB_CW_CURSOR, val);
+        xcb_flush(window->connection);
+    }
+
+    void xcb_window_show_cursor(platform_window_t* window)
+    {
+        u32 val[] = { XCB_NONE }; 
+        xcb_change_window_attributes(window->connection, window->window, XCB_CW_CURSOR, val);
+        xcb_flush(window->connection);
+    }
+
+    void xcb_window_lock_cursor(platform_window_t* window)
+    {
+        // TODO: Установить флаг, для восстановления после перехода в другое окно!
+        // NOTE: Интересно, что когда курсор скрывается, то захват срабатывает при возвращении в окно! Где логика?????
+
+        const u16 event_mask = XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_BUTTON_RELEASE;
+        xcb_grab_pointer_cookie_t grab_cookie = xcb_grab_pointer(
+            window->connection, true, window->window, event_mask, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, window->window,
+            XCB_NONE, XCB_CURRENT_TIME
+        );
+
+        xcb_grab_pointer_reply_t* grab_reply = xcb_grab_pointer_reply(window->connection, grab_cookie, nullptr);
+        if(grab_reply == nullptr || grab_reply->status != XCB_GRAB_STATUS_SUCCESS)
+        {
+            LOG_ERROR("Failed to lock cursor (xcb).");
+            return;
+        }
+
+        free(grab_reply);
+    }
+
+    void xcb_window_unlock_cursor(platform_window_t* window)
+    {
+        xcb_ungrab_pointer(window->connection, XCB_CURRENT_TIME);
+    }
+
+    void xcb_enumerate_vulkan_extensions(u32* extension_count, const char** out_extensions)
     {
         static const char* extensions[] = {
             VK_KHR_SURFACE_EXTENSION_NAME,
@@ -686,7 +878,7 @@
         mcopy(out_extensions, extensions, sizeof(char*) * (*extension_count));
     }
 
-    u32 xcb_backend_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
+    u32 xcb_window_create_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void** out_vulkan_surface)
     {
         VkXcbSurfaceCreateInfoKHR surface_create_info = {
             .sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
@@ -697,13 +889,13 @@
         return vkCreateXcbSurfaceKHR(vulkan_instance, &surface_create_info, vulkan_allocator, (VkSurfaceKHR*)out_vulkan_surface);
     }
 
-    void xcb_backend_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface)
+    void xcb_window_destroy_vulkan_surface(platform_window* window, void* vulkan_instance, void* vulkan_allocator, void* vulkan_surface)
     {
         UNUSED(window);
         vkDestroySurfaceKHR(vulkan_instance, vulkan_surface, vulkan_allocator);
     }
 
-    u32 xcb_backend_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index)
+    u32 xcb_window_supports_vulkan_presentation(platform_window* window, void* vulkan_pyhical_device, u32 queue_family_index)
     {
         return vkGetPhysicalDeviceXcbPresentationSupportKHR(
             vulkan_pyhical_device, queue_family_index, window->connection, window->screen->root_visual

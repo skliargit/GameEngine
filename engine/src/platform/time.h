@@ -61,28 +61,28 @@ void platform_time_shutdown(void);
     @note Может использоваться для проверки состояния подсистемы перед вызовом других функций.
     @return true - подсистема инициализирована успешно, false - подсистема не инициализирована.
 */
-API bool platform_time_is_initialized(void);
+CORE_API bool platform_time_is_initialized(void);
 
 /*
     @brief Получает текущее время в секундах с эпохи Unix (1970-01-01 00:00:00 UTC).
     @note Thread-safe и может использоваться без дополнительной синхронизации.
     @return Количество секунд, прошедших с 1970-01-01 00:00:00 UTC.
 */
-API u64 platform_time_now(void);
+CORE_API u64 platform_time_now(void);
 
 /*
     @brief Получает seed на основе текущего значение системного таймера высокой точности.
     @note Thread-safe, не подходит для криптографических целей.
     @return Начальное значение для генераторов случайных чисел.
 */
-API u64 platform_time_seed(void);
+CORE_API u64 platform_time_seed(void);
 
 /*
     @brief Получает время работы системы (uptime) в секундах с высокой точностью.
     @note Thread-safe, идеально для измерения интервалов, таймингов, игрового цикла.
     @return Количество секунд с момента загрузки системы с высокой точностью.
 */
-API f64 platform_time_uptime(void);
+CORE_API f64 platform_time_uptime(void);
 
 /*
     @brief Преобразует время в секундах в локальное дату и время.
@@ -90,7 +90,7 @@ API f64 platform_time_uptime(void);
     @param time_sec Количество секунд с 1970-01-01 00:00:00 UTC.
     @return Структура platform_datetime с локальным временем.
 */
-API platform_datetime platform_time_to_local(u64 time_sec);
+CORE_API platform_datetime platform_time_to_local(u64 time_sec);
 
 /*
     @brief Преобразует время в секундах в дату и время UTC.
@@ -98,7 +98,7 @@ API platform_datetime platform_time_to_local(u64 time_sec);
     @param time_sec Количество секунд с 1970-01-01 00:00:00 UTC.
     @return Структура platform_datetime с временем UTC.
 */
-API platform_datetime platform_time_to_utc(u64 time_sec);
+CORE_API platform_datetime platform_time_to_utc(u64 time_sec);
 
 /*
     @brief Преобразует структуру даты и времени в секунды с эпохи Unix.
@@ -107,4 +107,4 @@ API platform_datetime platform_time_to_utc(u64 time_sec);
     @param dt Указатель на структуру platform_datetime для сохранения результата преобразования.
     @return Количество секунд с 1970-01-01 00:00:00 UTC или 0 при недопустимой дате.
 */
-API u64 platform_time_from_datetime(const platform_datetime* dt);
+CORE_API u64 platform_time_from_datetime(const platform_datetime* dt);

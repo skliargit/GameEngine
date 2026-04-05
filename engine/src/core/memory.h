@@ -76,14 +76,14 @@ void memory_system_shutdown();
     @warning Не thread-safe. Должна вызываться из того же потока, что и инициализация/завершение.
     @return true - система инициализирована и готова к работе, false - система не инициализирована.
 */
-API bool memory_system_is_initialized();
+CORE_API bool memory_system_is_initialized();
 
 /*
     @brief Возвращает строку с информацией об использовании памяти по тегам.
     @note После использования освободить с использованием string_free.
     @return Строка с отформатированной статистикой использования памяти.
 */
-API const char* memory_system_usage_str();
+CORE_API const char* memory_system_usage_str();
 
 /*
     @brief Выделяет блок памяти с указанием размера, выравнивания и тегом.
@@ -92,7 +92,7 @@ API const char* memory_system_usage_str();
     @param tag Тег памяти для отслеживания.
     @return Указатель на выделенную память или nullptr при ошибке.
 */
-API void* memory_allocate(u64 size, u16 alignment, memory_tag tag);
+CORE_API void* memory_allocate(u64 size, u16 alignment, memory_tag tag);
 
 /*
     @brief Освобождает ранее выделенный блок памяти.
@@ -101,7 +101,7 @@ API void* memory_allocate(u64 size, u16 alignment, memory_tag tag);
     @param size Размер освобождаемой памяти в байтах.
     @param tag Тег памяти (должен соответствовать тегу выделения).
 */
-API void memory_free(void* block, u64 size, memory_tag tag);
+CORE_API void memory_free(void* block, u64 size, memory_tag tag);
 
 /*
     @brief Форматирует размер памяти в наиболее подходящие единицы измерения.
@@ -110,7 +110,7 @@ API void memory_free(void* block, u64 size, memory_tag tag);
     @param size Размер памяти в байтах для форматирования.
     @param out_format Указатель на структуру memory_format, куда будет записан результат.
 */
-API void memory_get_format(u64 size, memory_format* out_format);
+CORE_API void memory_get_format(u64 size, memory_format* out_format);
 
 /*
     @brief Макрос выделения памяти без выравнивания (выравнивание = 1).

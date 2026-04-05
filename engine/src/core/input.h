@@ -2,8 +2,8 @@
     @file input.h
     @brief Интерфейс системы ввода для обработки клавиатуры и мыши.
     @author Дмитрий Скляр.
-    @version 1.0
-    @date 27-08-2025
+    @version 1.1
+    @date 05-02-2026
 
     @license Лицензия Apache, версия 2.0 («Лицензия»);
           Вы не имеете права использовать этот файл без соблюдения условий Лицензии.
@@ -18,7 +18,7 @@
             - Обработку состояний мыши (нажатие, отпускание, удержание)
             - Отслеживание позиции и перемещения курсора
             - Обработку прокрутки колеса мыши
-            - Преобразование кодов (клавиш и копок) в строковый эквивалент.
+            - Преобразование кодов (клавиш и копок) в строковый эквивалент
 
     @note Для корректной работы необходимо предварительно инициализировать (в указанном порядке):
             - Подсистему консоли platform_console_initialize()
@@ -32,142 +32,153 @@
 #include <core/defines.h>
 #include <core/input_types.h>
 
-/*
+/**
     @brief Инициализирует систему ввода.
     @warning Не thread-safe. Должна вызываться из основного потока.
     @return true если инициализация прошла успешно, иначе false.
 */
 bool input_system_initialize();
 
-/*
+/**
     @brief Завершает работу системы ввода и освобождает ресурсы.
     @warning Не thread-safe. Должна вызываться из основного потока.
 */
 void input_system_shutdown();
 
-/*
+/**
     @brief Проверяет, была ли инициализирована система ввода.
     @warning Не thread-safe. Должна вызываться из того же потока, что и инициализация/завершение.
     @return true - система инициализирована и готова к работе, false - система не инициализирована.
 */
-API bool input_system_is_initialized();
+CORE_API bool input_system_is_initialized();
 
-/*
-    @brief Обновляет состояния системы ввода (должен вызываться каждый кадр).
+/**
+    @brief Обновляет состояния системы ввода.
+    @note Должна вызываться в начале каждого кадра перед platform_window_poll_events().
 */
 void input_system_update();
 
-/*
+/**
     @brief Обновляет состояние клавиши клавиатуры.
+    @note Должна вызываться при получении события клавиатуры.
     @param key Код клавиши.
     @param state Новое состояние клавиши (true - нажата, false - отпущена).
 */
 void input_keyboard_key_update(keyboard_key key, bool state);
 
-/*
+/**
     @brief Обновляет состояние кнопки мыши.
+    @note Должна вызываться при получении события мыши.
     @param button Код кнопки мыши.
     @param state Новое состояние кнопки (true - нажата, false - отпущена).
 */
 void input_mouse_button_update(mouse_button button, bool state);
 
-/*
-    @brief Обновляет позицию курсора мыши.
-    @param x Координата X курсора.
-    @param y Координата Y курсора.
+/**
+    @brief Обновляет абсолютную позицию курсора мыши.
+    @param x Координата X курсора в пикселях.
+    @param y Координата Y курсора в экранных координатах.
 */
 void input_mouse_position_update(i32 x, i32 y);
 
-/*
+/**
+    @brief Обновляет относительную позицию курсора мыши.
+    @param x Координата X курсора в пикселях.
+    @param y Координата Y курсора в экранных координатах.
+*/
+void input_mouse_delta_update(i32 x, i32 y);
+
+/**
     @brief Обновляет значение прокрутки колеса мыши.
     @param vertical_delta Значение вертикальной прокрутки (положительное - вперед, отрицательное - назад).
     @param horizontal_delta Значение горизонтальной прокрутки (отрицательное - влево, положительное - вправо).
 */
 void input_mouse_wheel_update(i32 vertical_delta, i32 horizontal_delta);
 
-/*
+/**
     @brief Проверяет, была ли клавиша нажата (0 -> 1).
     @param key Код клавиши для проверки.
     @return true если клавиша перешла из отпущенного состояния в нажатое.
 */
-API bool input_key_down(keyboard_key key);
+CORE_API bool input_key_down(keyboard_key key);
 
-/*
+/**
     @brief Проверяет, была ли клавиша отпущена (1 -> 0).
     @param key Код клавиши для проверки.
     @return true если клавиша перешла из нажатого состояния в отпущенное.
 */
-API bool input_key_up(keyboard_key key);
+CORE_API bool input_key_up(keyboard_key key);
 
-/*
+/**
     @brief Проверяет, нажата ли клавиша в данный момент.
     @param key Код клавиши для проверки.
     @return true если клавиша в настоящее время нажата.
 */
-API bool input_key_held(keyboard_key key);
+CORE_API bool input_key_held(keyboard_key key);
 
-/*
+/**
     @brief Получает строковое представление кода клавиши клавиатуры.
     @note Возвращаемая строка является статической и не требует освобождения.
     @param key Код клавиши для преобразования.
     @return Указатель на строку с именем клавиши, или "UNKNOWN" для неизвестных кодов.
 */
-API const char* input_key_to_str(keyboard_key key);
+CORE_API const char* input_key_to_str(keyboard_key key);
 
-/*
+/**
     @brief Проверяет, была ли кнопка мыши нажата (0 -> 1).
     @param button Код кнопки мыши для проверки.
     @return true если кнопка перешла из отпущенного состояния в нажатое.
 */
-API bool input_mouse_down(mouse_button button);
+CORE_API bool input_mouse_down(mouse_button button);
 
-/*
+/**
     @brief Проверяет, была ли кнопка мыши отпущена (1 -> 0).
     @param button Код кнопки мыши для проверки.
     @return true если кнопка перешла из нажатого состояния в отпущенное.
 */
-API bool input_mouse_up(mouse_button button);
+CORE_API bool input_mouse_up(mouse_button button);
 
-/*
+/**
     @brief Проверяет, нажата ли кнопка мыши в данный момент.
     @param button Код кнопки мыши для проверки.
     @return true если кнопка в настоящее время нажата.
 */
-API bool input_mouse_held(mouse_button button);
+CORE_API bool input_mouse_held(mouse_button button);
 
-/*
+/**
     @brief Получает текущую позицию курсора мыши.
     @param out_x Указатель для сохранения координаты X.
     @param out_y Указатель для сохранения координаты Y.
 */
-API void input_mouse_position(i32* out_x, i32* out_y);
+CORE_API void input_mouse_position(i32* out_x, i32* out_y);
 
-/*
+/**
     @brief Получает относительное перемещение мыши с последнего обновления.
     @note dx > 0 - движение вправо, dx < 0 - движение влево, dy > 0 - движение вниз, dy < 0 - движение вверх.
     @param out_dx Указатель для сохранения смещения по X.
     @param out_dy Указатель для сохранения смещения по Y.
+    @return true - было зафиксировано перемещение указателя, false - изменений не зафиксировано.
 */
-API void input_mouse_move_delta(i32* out_dx, i32* out_dy);
+CORE_API bool input_mouse_delta(i32* out_dx, i32* out_dy);
 
-/*
+/**
     @brief Получает текущее значение вертикальной прокрутки колеса мыши.
     @param out_delta Указатель для сохранения значения прокрутки (положительное - вперед, отрицательное - назад).
-    @return true если была зафиксирована прокрутка.
+    @return true - была зафиксирована прокрутка.
 */
-API bool input_mouse_wheel_vertical(i32* out_delta);
+CORE_API bool input_mouse_wheel_vertical(i32* out_delta);
 
-/*
+/**
     @brief Получает текущее значение горизонтальной прокрутки колеса мыши.
     @param out_delta Указатель для сохранения значения прокрутки (отрицательное - влево, положительное - вправо).
-    @return true если была зафиксирована прокрутка.
+    @return true - была зафиксирована прокрутка.
 */
-API bool input_mouse_wheel_horizontal(i32* out_delta);
+CORE_API bool input_mouse_wheel_horizontal(i32* out_delta);
 
-/*
+/**
     @brief Получает строковое представление кода кнопки мыши.
     @note Возвращаемая строка является статической и не требует освобождения.
     @param button Код кнопки мыши для преобразования.
     @return Указатель на строку с именем кнопки, или "UNKNOWN" для неизвестных кодов.
 */
-API const char* input_mouse_button_to_str(mouse_button button);
+CORE_API const char* input_mouse_button_to_str(mouse_button button);

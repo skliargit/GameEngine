@@ -3,6 +3,7 @@
 #ifdef PLATFORM_WINDOWS_FLAG
 
     #include "debug/assert.h"
+    #include "core/logger.h"
     #include <windows.h>
     #include <heapapi.h>
     #include <string.h>

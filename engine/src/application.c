@@ -38,56 +38,61 @@ typedef struct application_context {
 // Контекст приложения.
 static application_context* context = nullptr;
 
-void application_on_close()
+void application_set_cursor_lock(bool locked)
 {
-    application_quit();
+    if(locked)
+    {
+        platform_window_hide_cursor(context->window);
+        platform_window_lock_cursor(context->window);
+    }
+    else
+    {
+        platform_window_show_cursor(context->window);
+        platform_window_unlock_cursor(context->window);
+    }
 }
 
-void application_on_resize(const u32 width, const u32 height)
+static bool on_event(platform_window_event_context_t* event)
 {
-    renderer_on_resize(width, height);
-    context->on_resize(width, height);
+    switch(event->type)
+    {
+        case PLATFORM_WINDOW_EVENT_SHOULD_CLOSE: {
+            application_quit();
+        } break;
 
-    event_context data = {.u32[0] = width, .u32[1] = height};
-    event_send(EVENT_CODE_APPLICATION_RESIZE, nullptr, &data);
-}
+        case PLATFORM_WINDOW_EVENT_RESIZE: {
+            u32 width = event->window_resize.to_width;
+            u32 height = event->window_resize.to_height;
+            context->on_resize(width, height);
+            renderer_on_resize(width, height);
+        } break;
 
-void application_on_focus(const bool focus_state)
-{
-    event_context data = {.u32[0] = focus_state};
-    event_send(EVENT_CODE_APPLICATION_FOCUS, nullptr, &data);
-}
+        case PLATFORM_WINDOW_EVENT_KEYBOARD_KEY: {
+            input_keyboard_key_update(event->keyboard_key.code, event->keyboard_key.state);
+        } break;
 
-void application_on_key(const keyboard_key key, const bool press_state)
-{
-    input_keyboard_key_update(key, press_state);
+        case PLATFORM_WINDOW_EVENT_MOUSE_BUTTON: {
+            input_mouse_button_update(event->mouse_button.code, event->mouse_button.state);
+        } break;
 
-    event_context data = {.u32[0] = key, .u32[1] = 0, .u32[2] = press_state};
-    event_send(EVENT_CODE_KEYBOARD_KEY, nullptr, &data);
-}
+        case PLATFORM_WINDOW_EVENT_MOUSE_MOVE: {
+            input_mouse_position_update(event->mouse_move.to_x, event->mouse_move.to_y);
+        } break;
 
-void application_on_mouse_button(const mouse_button btn, const bool press_state)
-{
-    input_mouse_button_update(btn, press_state);
+        case PLATFORM_WINDOW_EVENT_MOUSE_MOVE_RELATIVE: {
+            input_mouse_delta_update(event->mouse_move_relative.dx, event->mouse_move_relative.dy);
+        } break;
 
-    event_context data = { .u32[0] = btn, .u32[1] = press_state};
-    event_send(EVENT_CODE_MOUSE_BUTTON, nullptr, &data);
-}
+        case PLATFORM_WINDOW_EVENT_MOUSE_WHEEL: {
+            input_mouse_wheel_update(event->mouse_wheel.delta_vert, event->mouse_wheel.delta_horz);
+        } break;
 
-void application_on_mouse_move(const i32 x, const i32 y)
-{
-    input_mouse_position_update(x, y);
+        default:
+            LOG_TRACE("Application unsupported event type: %u.", event->type);
+            return false;
+    }
 
-    event_context data = {.i32[0] = x, .i32[1] = y};
-    event_send(EVENT_CODE_MOUSE_MOVE, nullptr, &data);
-}
-
-void application_on_mouse_wheel(const i32 vertical_delta, const i32 horizontal_delta)
-{
-    input_mouse_wheel_update(vertical_delta, horizontal_delta);
-
-    event_context data = {.i32[0] = vertical_delta, .i32[1] = horizontal_delta};
-    event_send(EVENT_CODE_MOUSE_WHEEL, nullptr, &data);
+    return true;
 }
 
 bool application_initialize(const application_config* config)
@@ -194,17 +199,10 @@ bool application_initialize(const application_config* config)
     }
 
     // Создание окна.
-    platform_window_config windowcfg = {
+    platform_window_config_t windowcfg = {
         .title = config->window.title,
         .width = config->window.width,
         .height = config->window.height,
-        .on_close = application_on_close,
-        .on_resize = application_on_resize,
-        .on_focus = application_on_focus,
-        .on_key = application_on_key,
-        .on_mouse_button = application_on_mouse_button,
-        .on_mouse_move = application_on_mouse_move,
-        .on_mouse_wheel = application_on_mouse_wheel
     };
 
     context->window = platform_window_create(&windowcfg);
@@ -216,8 +214,13 @@ bool application_initialize(const application_config* config)
     }
     LOG_INFO("Window has been created successfully.");
 
-    // TODO: При создании окна вызывает обновление экрана, пока рендерер еще не инициализирован!
-    //       Как вариант позднее связывание функций обработчиков.
+    platform_window_set_event_callback(context->window, PLATFORM_WINDOW_EVENT_SHOULD_CLOSE, on_event, nullptr);
+    platform_window_set_event_callback(context->window, PLATFORM_WINDOW_EVENT_RESIZE, on_event, nullptr);
+    platform_window_set_event_callback(context->window, PLATFORM_WINDOW_EVENT_KEYBOARD_KEY, on_event, nullptr);
+    platform_window_set_event_callback(context->window, PLATFORM_WINDOW_EVENT_MOUSE_BUTTON, on_event, nullptr);
+    platform_window_set_event_callback(context->window, PLATFORM_WINDOW_EVENT_MOUSE_MOVE, on_event, nullptr);
+    platform_window_set_event_callback(context->window, PLATFORM_WINDOW_EVENT_MOUSE_MOVE_RELATIVE, on_event, nullptr);
+    platform_window_set_event_callback(context->window, PLATFORM_WINDOW_EVENT_MOUSE_WHEEL, on_event, nullptr);
 
     // Инициализация рендерера.
     renderer_config rendercfg = {
@@ -299,27 +302,35 @@ bool application_run()
             // TODO: Fixed Timestep для плавности + интерполяция шага.
             if(!context->update(delta_time))
             {
-                LOG_ERROR("Update of user application failed. Shutting down.");
-                application_terminate();
+                LOG_ERROR("Failed updating in user application. Shutting down.");
                 return false;
             }
+        }
 
-            // Время от начала кадра: обработки обновления логики приложения.
-            frame_stats.update_time = timer_delta(&stats_timer);
+        // Время от начала кадра: обработки обновления логики приложения.
+        frame_stats.update_time = timer_delta(&stats_timer);
 
+        // Начало отрисовки.
+        if(renderer_frame_begin())
+        {
             if(!context->render(delta_time))
             {
-                LOG_ERROR("Render of user application failed. Shutting down.");
-                application_terminate();
+                LOG_ERROR("Failed rendering in user application. Shutting down.");
                 return false;
             }
 
-            // TODO: Временно.
-            renderer_draw();
-
-            // Время от начала кадра: отрисовка буфера.
-            frame_stats.render_time = timer_delta(&stats_timer);
+            if(!renderer_frame_end())
+            {
+                LOG_ERROR("Failed to end frame.");
+            }
         }
+        else
+        {
+            LOG_DEBUG("Skipping begin frame.");
+        }
+
+        // Время от начала кадра: отрисовка буфера.
+        frame_stats.render_time = timer_delta(&stats_timer);
 
         // Время от начала кадра и расчет времени сна с поправкой на ошибку.
         // NOTE: Если время кадра превысило заданное, то начало нового кадра после этой команды!
