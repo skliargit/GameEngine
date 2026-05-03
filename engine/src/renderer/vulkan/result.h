@@ -20,7 +20,7 @@
 #pragma once
 
 #include <core/defines.h>
-#include <renderer/vulkan/vulkan_types.h>
+#include <renderer/vulkan/types.h>
 
 // TODO: ...is_not_success
 /*

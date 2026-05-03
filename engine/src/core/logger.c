@@ -125,7 +125,8 @@ void log_default_handler(const log_message_t* message)
     };
 
     // Формат сообщения по умолчанию.
-    static const char* format_message = "%hu-%02hhu-%02hhu %02hhu:%02hhu:%02hhu %s (%s:%-3u): %s\n";
+    // static const char* format_message = "%hu-%02hhu-%02hhu %02hhu:%02hhu:%02hhu %s (%s:%-3u): %s\n";
+    static const char* format_message = "%02hhu:%02hhu:%02hhu %s (%s:%-3u): %s\n";
 
     // Кешированная дата.
     static platform_datetime dt;
@@ -150,8 +151,11 @@ void log_default_handler(const log_message_t* message)
     }
 
     // Копирование сообщения в буфер.
-    string_format(buffer, buffer_length, format_message, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second,
-        levels[message->level], message->filename, message->fileline, message->message
+    // string_format(buffer, buffer_length, format_message, dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second,
+    //     levels[message->level], message->filename, message->fileline, message->message
+    // );
+    string_format(buffer, buffer_length, format_message, dt.hour, dt.minute, dt.second, levels[message->level],
+        message->filename, message->fileline, message->message
     );
 
     if(message->level <= LOG_LEVEL_ERROR)

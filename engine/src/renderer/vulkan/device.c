@@ -1,6 +1,6 @@
-#include "renderer/vulkan/vulkan_device.h"
-#include "renderer/vulkan/vulkan_window.h"
-#include "renderer/vulkan/vulkan_result.h"
+#include "renderer/vulkan/device.h"
+#include "renderer/vulkan/window.h"
+#include "renderer/vulkan/result.h"
 
 #include "debug/assert.h"
 #include "core/logger.h"
@@ -85,13 +85,15 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
         return false;
     }
 
-    // Поддержка видимости памяти графического устройства.
+    // Поддержка видимости памяти графического устройства (UMA).
     for(u32 i = 0; i < physical->memory_properties.memoryTypeCount; ++i)
     {
+        VkMemoryPropertyFlags flags = physical->memory_properties.memoryTypes[i].propertyFlags;
+
         // Проветка каждого типа памяти на видимость.
-        if((physical->memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-        && (physical->memory_properties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) != VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+        if((flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) && (flags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
         {
+            // TODO: Проверка VK_MEMORY_PROPERTY_HOST_COHERENT_BIT для получения ручной синхронизации?
             out_device->supports_host_local_memory = true;
             LOG_DEBUG("Vulkan physical device supports local memory mapping at the host level.");
             break;

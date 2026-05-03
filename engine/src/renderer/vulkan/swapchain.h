@@ -1,7 +1,7 @@
 #pragma once
 
 #include <core/defines.h>
-#include <renderer/vulkan/vulkan_types.h>
+#include <renderer/vulkan/types.h>
 
 /**/
 bool vulkan_swapchain_create(vulkan_context* context, u32 width, u32 height, vulkan_swapchain* out_swapchain);

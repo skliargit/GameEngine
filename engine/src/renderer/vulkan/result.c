@@ -1,4 +1,4 @@
-#include "renderer/vulkan/vulkan_result.h"
+#include "renderer/vulkan/result.h"
 
 bool vulkan_result_is_success(VkResult result)
 {

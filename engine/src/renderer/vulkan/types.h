@@ -6,20 +6,16 @@
 
 typedef struct platform_window platform_window;
 
-// @brief Тип буфера данных.
+/**
+    @brief Тип буфера данных.
+*/
 typedef enum vulkan_buffer_type {
-    // @brief Использование буфера для вершинных данных.
-    VULKAN_BUFFER_TYPE_VERTEX,
-    // @brief Использование буфера для индексных данных.
-    VULKAN_BUFFER_TYPE_INDEX,
-    // @brief Использование буфера для uniform переменных.
-    VULKAN_BUFFER_TYPE_UNIFORM,
-    // @brief Использование буфера для подготовки целей визуализации (из оперативной памяти в видеопамять).
-    VULKAN_BUFFER_TYPE_STAGING,
-    // @brief Использование буфера для чтения целей визуализации (для чтения из видеопамяти).
-    VULKAN_BUFFER_TYPE_READ,
-    // @brief Использование буфера для хранения данных.
-    VULKAN_BUFFER_TYPE_STORAGE,
+    VULKAN_BUFFER_TYPE_VERTEX,                           /**< Использование буфера для вершинных данных.     */
+    VULKAN_BUFFER_TYPE_INDEX,                            /**< Использование буфера для индексных данных.     */
+    VULKAN_BUFFER_TYPE_UNIFORM,                          /**< Использование буфера для uniform переменных.   */
+    VULKAN_BUFFER_TYPE_STAGING,                          /**< Использование буфера для операций копирования. */
+    VULKAN_BUFFER_TYPE_READ,                             /**< Использование буфера для операций чтения.      */
+    VULKAN_BUFFER_TYPE_STORAGE,                          /**< Использование буфера для хранения данных.      */
 } vulkan_buffer_type;
 
 // @brief Представляет буфер данных в Vulkan.
@@ -42,25 +38,42 @@ typedef struct vulkan_buffer {
     VkDeviceMemory memory;
 } vulkan_buffer;
 
-// @brief Котекст экземпляра изображения в Vulkan.
+/**
+    @brief Контекст экземпляра изображения в Vulkan.
+*/
 typedef struct vulkan_image {
-    // @brief Указатель на изображение.
-    VkImage handle;
-    // @brief Вид изображения, используется для доступа к изображению.
-    VkImageView view;
-    // @brief Память изображения (GPU сторона).
-    VkDeviceMemory memory;
-    // @brief Требования к памяти GPU.
-    VkMemoryRequirements memory_requirements;
-    // @brief Флаги свойств памяти (кеш).
-    VkMemoryPropertyFlags memory_property_flags;
-    // @brief Ширина изображения.
-    u32 width;
-    // @brief Высота изображения.
-    u32 height;
-    // @brief Флаг указывающий на использование памяти GPU.
-    bool use_device_local;
+    VkImage handle;                                      /**< Указатель на изображение.                                */
+    VkImageView view;                                    /**< Вид изображения, используется для доступа к изображению. */
+    VkDeviceMemory memory;                               /**< Память изображения (GPU сторона).                        */
+    VkMemoryRequirements memory_requirements;            /**< Требования к памяти GPU.                                 */
+    VkMemoryPropertyFlags memory_property_flags;         /**< Флаги свойств памяти (кеш).                              */
+    u32 width;                                           /**< Ширина изображения в пикселях.                           */
+    u32 height;                                          /**< Высота изображения в пикселях.                           */
+    bool use_device_local;                               /**< Флаг указывающий на использование памяти GPU.            */
 } vulkan_image;
+
+/**
+    @brief Комбинации перевода layout-во изображений.
+*/
+typedef enum vulkan_image_transition {
+    VULKAN_IMAGE_TRANSITION_UNDEFINED_TO_TRANSFER_DST,   /**< Подготавливает буфер цвета для записи в него данных.              */
+    VULKAN_IMAGE_TRANSITION_TRANSFER_DST_TO_SHADER_READ, /**< Подготавливает буфер цвета для чтения шейдером.                   */
+    VULKAN_IMAGE_TRANSITION_ATTACHMENTS_TO_RENDERING,    /**< Подготавливает буфер цвета и глубины для выполнения рендеринга.   */
+    VULKAN_IMAGE_TRANSITION_ATTACHMENT_TO_PRESENT,       /**< Подготавливает буфер цвета для отображения на экран.              */
+    VULKAN_IMAGE_TRANSITION_CUSTOM                       /**< Подготавливает указанные буферы по указанным описаниям переходов. */
+} vulkan_image_transition_t;
+
+/**
+    @brief Описания пользовательского перевода layout-а изображения.
+*/
+typedef struct vulkan_image_transition_custom {
+    VkImageLayout old_layout;                            /**< ... */
+    VkImageLayout new_layout;                            /**< ... */
+    VkPipelineStageFlags src_stage;                      /**< ... */
+    VkAccessFlags src_access;                            /**< ... */
+    VkPipelineStageFlags dst_stage;                      /**< ... */
+    VkAccessFlags dst_access;                            /**< ... */
+} vulkan_image_transition_custom_t;
 
 // @brief Цепочка обмена для управления изображениями представления.
 typedef struct vulkan_swapchain {

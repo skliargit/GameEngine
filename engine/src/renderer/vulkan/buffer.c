@@ -1,6 +1,7 @@
-#include "renderer/vulkan/vulkan_buffer.h"
-#include "renderer/vulkan/vulkan_result.h"
-#include "renderer/vulkan/vulkan_utils.h"
+#include "renderer/vulkan/buffer.h"
+#include "renderer/vulkan/result.h"
+#include "renderer/vulkan/utils.h"
+#include "renderer/vulkan/command_buffer.h"
 
 #include "core/logger.h"
 #include "core/memory.h"
@@ -44,72 +45,46 @@ static bool buffer_copy_range(vulkan_context* context, VkBuffer src, u64 src_off
     }
 
     // Выделение временного командного буфера.
-    VkCommandBufferAllocateInfo allocate_info = {
-        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool        = context->device.graphics_queue.command_pool,
-        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1
-    };
-
-    // TODO: Интерфейс командного буфера!
-    // Создание временного буфера команд.
     VkCommandBuffer cmdbuf;
-    result = vkAllocateCommandBuffers(context->device.logical, &allocate_info, &cmdbuf);
-    if(!vulkan_result_is_success(result))
+    if(!vulkan_command_buffer_allocate(context, context->device.graphics_queue.command_pool, 1, &cmdbuf))
     {
-        LOG_ERROR("Failed to allocate command buffers: %s.", vulkan_result_get_string(result));
+        LOG_ERROR("Failed to allocate command buffer for buffer copy operation.");
         return false;
     }
 
     // Начало записи команд во временный буфер команд.
-    VkCommandBufferBeginInfo cmdbuf_begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, // Указывает на однократное использование.
-    };
-
-    result = vkBeginCommandBuffer(cmdbuf, &cmdbuf_begin_info);
-    if(!vulkan_result_is_success(result))
+    if(!vulkan_command_buffer_begin(cmdbuf, true, false, false))
     {
-        LOG_ERROR("Failed to start recording to the command buffer: %s.", vulkan_result_get_string(result));
+        LOG_ERROR("Failed to begin recording command buffer for buffer copy operation.");
         return false;
     }
 
     // Запись команды для копирования региона памяти.
-    VkBufferCopy copy_region;
-    copy_region.srcOffset = src_offset;
-    copy_region.dstOffset = dst_offset;
-    copy_region.size = size;
+    VkBufferCopy copy_region = {
+        .srcOffset = src_offset,
+        .dstOffset = dst_offset,
+        .size      = size
+    };
+
     vkCmdCopyBuffer(cmdbuf, src, dst, 1, &copy_region);
 
     // Завершение записи команд во временный буфер команд.
-    result = vkEndCommandBuffer(cmdbuf);
-    if(!vulkan_result_is_success(result))
+    if(!vulkan_command_buffer_end(cmdbuf))
     {
-        LOG_ERROR("Failed to end recording to the command buffer: %s.", vulkan_result_get_string(result));
+        LOG_ERROR("Failed to end recording command buffer for buffer copy operation.");
         return false;
     }
 
-    // TODO: Встроить семафоры.
     // Отправка на выполнение временного буфера команд.
-    VkSubmitInfo cmdbuf_submit_info = {
-        .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        // .waitSemaphoreCount   = ,
-        // .pWaitSemaphores      = ,
-        // .pWaitDstStageMask    = ,
-        // .signalSemaphoreCount = ,
-        // .pSignalSemaphores    = ,
-        .commandBufferCount   = 1,
-        .pCommandBuffers      = &cmdbuf,
-    };
-
-    result = vkQueueSubmit(queue, 1, &cmdbuf_submit_info, nullptr);
-    if(!vulkan_result_is_success(result))
+    // TODO: Встроить семафоры.
+    if(!vulkan_command_buffer_submit(1, &cmdbuf, queue, 0, nullptr, nullptr, 0, nullptr, nullptr))
     {
-        LOG_ERROR("Failed to submit queue: %s.", vulkan_result_get_string(result));
+        LOG_ERROR("Failed to submit command buffer for buffer copy operation.");
         return false;
     }
 
     // Ожидание окончания операции.
+    // TODO: Временное решение.
     result = vkQueueWaitIdle(queue);
     if(!vulkan_result_is_success(result))
     {
@@ -117,7 +92,7 @@ static bool buffer_copy_range(vulkan_context* context, VkBuffer src, u64 src_off
     }
 
     // Освобождение буфера команд.
-    vkFreeCommandBuffers(context->device.logical, context->device.graphics_queue.command_pool, 1, &cmdbuf);
+    vulkan_command_buffer_free(context, context->device.graphics_queue.command_pool, 1, &cmdbuf);
 
     return true;
 }

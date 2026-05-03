@@ -1,6 +1,6 @@
-#include "renderer/vulkan/vulkan_swapchain.h"
-#include "renderer/vulkan/vulkan_result.h"
-#include "renderer/vulkan/vulkan_image.h"
+#include "renderer/vulkan/swapchain.h"
+#include "renderer/vulkan/result.h"
+#include "renderer/vulkan/image.h"
 
 #include "core/logger.h"
 #include "core/memory.h"
@@ -289,7 +289,7 @@ static bool swapchain_create(vulkan_context* context, u32 width, u32 height, vul
         return false;
     }
 
-    if(!vulkan_image_view_cretae(context, swapchain->depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, &swapchain->depth_image))
+    if(!vulkan_image_create_view(context, swapchain->depth_format, VK_IMAGE_ASPECT_DEPTH_BIT, &swapchain->depth_image))
     {
         LOG_ERROR("Failed to create swapchain depth image views.");
         return false;

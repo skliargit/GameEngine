@@ -1,11 +1,13 @@
-#include "renderer/vulkan/vulkan_backend.h"
-#include "renderer/vulkan/vulkan_types.h"
-#include "renderer/vulkan/vulkan_result.h"
-#include "renderer/vulkan/vulkan_window.h"
-#include "renderer/vulkan/vulkan_device.h"
-#include "renderer/vulkan/vulkan_swapchain.h"
-#include "renderer/vulkan/vulkan_shader.h"
-#include "renderer/vulkan/vulkan_buffer.h"
+#include "renderer/vulkan/backend.h"
+#include "renderer/vulkan/types.h"
+#include "renderer/vulkan/result.h"
+#include "renderer/vulkan/window.h"
+#include "renderer/vulkan/device.h"
+#include "renderer/vulkan/swapchain.h"
+#include "renderer/vulkan/command_buffer.h"
+#include "renderer/vulkan/shader.h"
+#include "renderer/vulkan/buffer.h"
+#include "renderer/vulkan/image.h"
 
 #include "debug/assert.h"
 #include "core/logger.h"
@@ -431,21 +433,10 @@ static bool command_buffers_create()
 {
     context->graphics_command_buffers = darray_create_custom(VkCommandBuffer, context->swapchain.max_frames_in_flight);
 
-    VkCommandBufferAllocateInfo allocate_info = {
-        .sType              = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool        = context->device.graphics_queue.command_pool,
-        .level              = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = context->swapchain.max_frames_in_flight
-    };
-
-    VkResult result = vkAllocateCommandBuffers(context->device.logical, &allocate_info, context->graphics_command_buffers);
-    if(!vulkan_result_is_success(result))
-    {
-        LOG_ERROR("Failed to allocate command buffers: %s.", vulkan_result_get_string(result));
-        return false;
-    }
-
-    return true;
+    return vulkan_command_buffer_allocate(
+        context, context->device.graphics_queue.command_pool, context->swapchain.max_frames_in_flight,
+        context->graphics_command_buffers
+    );
 }
 
 static void command_buffers_destroy()
@@ -455,8 +446,9 @@ static void command_buffers_destroy()
         return;
     }
 
-    vkFreeCommandBuffers(
-        context->device.logical, context->device.graphics_queue.command_pool, context->swapchain.max_frames_in_flight, context->graphics_command_buffers
+    vulkan_command_buffer_free(
+        context, context->device.graphics_queue.command_pool, context->swapchain.max_frames_in_flight,
+        context->graphics_command_buffers
     );
 
     darray_destroy(context->graphics_command_buffers);
@@ -873,103 +865,48 @@ bool vulkan_backend_frame_begin()
         LOG_ERROR("Failed to acquire next image index.");
         return false;
     }
-    u32 image_index = context->swapchain.image_index;
 
-    // Получение командного буфера.
+    // Получение командного буфера и обнуление для повторного использования.
     // NOTE: То что командный буфер graphics_command_buffers[current_frame] свободен для использования гарантируется
     //       благодаря in_flight_fences[current_frame], который проверяется выше.
     VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
-
-    // До того, как будет использоваться командный буфер, его нужно вернуть в изначальное состояние.
-    result = vkResetCommandBuffer(cmdbuf, 0);
-    if(!vulkan_result_is_success(result))
+    if(!vulkan_command_buffer_reset(cmdbuf))
     {
-        LOG_ERROR("Failed to reset command buffer: %s (current index: %u).", vulkan_result_get_string(result), current_frame);
+        LOG_ERROR("Failed to reset command buffer at frame: %u.", current_frame);
         return false;
     }
 
     // Начало записи команд в текущий буфер команд кадра.
-    VkCommandBufferBeginInfo cmdbuf_begin_info = {
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        .flags = 0 // Указывает на использование командного буфера более одного раза.
-    };
-
-    result = vkBeginCommandBuffer(cmdbuf, &cmdbuf_begin_info);
-    if(!vulkan_result_is_success(result))
+    if(!vulkan_command_buffer_begin(cmdbuf, false, false, false))
     {
-        LOG_ERROR("Failed to start recording to the command buffer: %s (current index: %u).", vulkan_result_get_string(result), current_frame);
+        LOG_ERROR("Failed to begin recording command buffer at frame: %u.", current_frame);
         return false;
     }
 
     // TODO: При использовании graphics совместно с present вполне рабочий способ, однако как действовать,
     //       когда graphics и present работают параллельно?
 
-    // Перевод layout изображения в COLOR_ATTACHMENT_OPTIMAL.
-    VkImageMemoryBarrier color_barrier = {
-        .sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask                   = 0,
-        .dstAccessMask                   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .oldLayout                       = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout                       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .image                           = context->swapchain.images[image_index],
-        .subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-        .subresourceRange.baseMipLevel   = 0,
-        .subresourceRange.levelCount     = 1,
-        .subresourceRange.baseArrayLayer = 0,
-        .subresourceRange.layerCount     = 1
-    };
-
-    // TODO: Перенести изменение лайаутов для буфера глубины только при создании/пересоздании цепочки обмена!
-    // Перевод layout буфера глубины в DEPTH_ATTACHMENT_OPTIMAL.
-    VkImageMemoryBarrier depth_barrier = {
-        .sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask                   = 0,
-        .dstAccessMask                   = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        .oldLayout                       = VK_IMAGE_LAYOUT_UNDEFINED,
-        .newLayout                       = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
-        .image                           = context->swapchain.depth_image.handle,
-        .subresourceRange.aspectMask     = VK_IMAGE_ASPECT_DEPTH_BIT,
-        .subresourceRange.baseMipLevel   = 0,
-        .subresourceRange.levelCount     = 1,
-        .subresourceRange.baseArrayLayer = 0,
-        .subresourceRange.layerCount     = 1
-    };
-
-    VkImageMemoryBarrier image_barriers[] = {
-        color_barrier,
-        depth_barrier
-    };
-
-    const u32 image_barrier_count = ARRAY_SIZE(image_barriers);
+    u32 image_index = context->swapchain.image_index;
 
     // NOTE: Перед рендерингом в изображение swapchain'а и выполнения теста глубины нужно перевести их в правильные
     //       layout'ы. Для изображения цепиочки обмена и буфера глубины записывается команда барьера памяти, которая
     //       гарантирует, что все команды, которые используют эти изображения и записаны ПОСЛЕ барьера, будут ждать
-    //       на указанных стадиях (для каждоый команды своя стадия COLOR_ATTACHMENT_OUTPUT | EARLY_FRAGMENT_TESTS),
+    //       на указанных стадиях (для каждой команды своя стадия COLOR_ATTACHMENT_OUTPUT | EARLY_FRAGMENT_TESTS),
     //       пока команды ДО барьера, которые также используют эти же изображения, не завершат стадию TOP_OF_PIPE
-    //       и/или не будут переведены layout'ы изображений (oldLayout -> newLayout).
-    // NOTE: В данном случае, команд ДО барьера работающих с этими изображениями нет, а потому команды ПОСЛЕ барьера
-    //       будут ожидать только изменения layout'ов.
-    vkCmdPipelineBarrier(
-        cmdbuf,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        image_barrier_count, image_barriers
-    );
+    //       и/или не будут переведены layout'ы изображений (oldLayout -> newLayout). Так как команд ДО барьера
+    //       работающих с этими изображениями нет, то команды ПОСЛЕ барьера будут ожидать только изменения layout'ов.
+    // TODO: Перенести изменение лайаутов для буфера глубины только при создании/пересоздании цепочки обмена!
+    VkImage images[] = { context->swapchain.images[image_index], context->swapchain.depth_image.handle };
+    vulkan_image_transition_layout(cmdbuf, VULKAN_IMAGE_TRANSITION_ATTACHMENTS_TO_RENDERING, images);
 
-    VkClearValue color_clear_value = { .color = {{0.01f, 0.01f, 0.01f, 1.0f }} };
-    VkClearValue depth_clear_color = { .depthStencil = { 1.0f, 0 } };
-
+    // TODO: Обернуть начало и конец рендеринга?
     VkRenderingAttachmentInfo color_attachment = {
         .sType       = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .imageView   = context->swapchain.image_views[image_index],
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp     = VK_ATTACHMENT_STORE_OP_STORE,
-        .clearValue  = color_clear_value
+        .clearValue  =  (VkClearValue){ .color = {{ 0.01f, 0.01f, 0.01f, 1.0f }}} // Цвет очистки.
     };
 
     VkRenderingAttachmentInfo depth_attachment = {
@@ -978,12 +915,12 @@ bool vulkan_backend_frame_begin()
         .imageLayout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
         .loadOp      = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp     = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .clearValue  = depth_clear_color
+        .clearValue  = (VkClearValue){ .depthStencil = { 1.0f, 0 }}               // Значение глубины.
     };
 
     VkRenderingInfo rendering_info = {
         .sType                = VK_STRUCTURE_TYPE_RENDERING_INFO,
-        .renderArea           = { {0, 0}, {context->frame_width, context->frame_height} },
+        .renderArea           = {{0, 0}, {context->frame_width, context->frame_height}},
         .layerCount           = 1,
         .colorAttachmentCount = 1,
         .pColorAttachments    = &color_attachment,
@@ -1048,35 +985,15 @@ bool vulkan_backend_frame_end()
     vkCmdEndRendering(cmdbuf);
 
     // Перевод layout изображения в PRESENT_SRC.
-    VkImageMemoryBarrier color_barrier = {
-        .sType                           = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask                   = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .dstAccessMask                   = 0,
-        .oldLayout                       = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .newLayout                       = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        .image                           = context->swapchain.images[image_index],
-        .subresourceRange.aspectMask     = VK_IMAGE_ASPECT_COLOR_BIT,
-        .subresourceRange.baseMipLevel   = 0,
-        .subresourceRange.levelCount     = 1,
-        .subresourceRange.baseArrayLayer = 0,
-        .subresourceRange.layerCount     = 1
-    };
-
     // NOTE: Необходимости в переводе layout для буфера глубины нет, т.к. он нужен только на этапе
     //       тестирования глубины.
-
-    vkCmdPipelineBarrier(
-        cmdbuf, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, 0,
-        0, nullptr,
-        0, nullptr,
-        1, &color_barrier
-    );
+    VkImage images[] = { context->swapchain.images[image_index] };
+    vulkan_image_transition_layout(cmdbuf, VULKAN_IMAGE_TRANSITION_ATTACHMENT_TO_PRESENT, images);
 
     // Завершение записи команд в текущий буфер команд кадра.
-    VkResult result = vkEndCommandBuffer(cmdbuf);
-    if(!vulkan_result_is_success(result))
+    if(!vulkan_command_buffer_end(cmdbuf))
     {
-        LOG_ERROR("Failed to end recording to the command buffer: %s (current index: %u).", vulkan_result_get_string(result), current_frame);
+        LOG_ERROR("Failed to end recording command buffer at frame: %u.", current_frame);
         return false;
     }
 
@@ -1086,7 +1003,7 @@ bool vulkan_backend_frame_end()
     //       - приложения могут произвольно отображать любое изображение, полученное в данный момент.
     if(context->images_in_flight[image_index] != nullptr)
     {
-        result = vkWaitForFences(logical, 1, &context->images_in_flight[image_index], VK_TRUE, U64_MAX);
+        VkResult result = vkWaitForFences(logical, 1, &context->images_in_flight[image_index], VK_TRUE, U64_MAX);
         if(!vulkan_result_is_success(result))
         {
             LOG_ERROR("Failed to wait image in flight fence: %s.", vulkan_result_get_string(result));
@@ -1097,7 +1014,7 @@ bool vulkan_backend_frame_end()
     context->images_in_flight[image_index] = context->in_flight_fences[current_frame];
 
     // Сбрасывание барьера для текущего кадра.
-    result = vkResetFences(logical, 1, &context->in_flight_fences[current_frame]);
+    VkResult result = vkResetFences(logical, 1, &context->in_flight_fences[current_frame]);
     if(!vulkan_result_is_success(result))
     {
         LOG_ERROR("Failed to reset in flight fence: %s", vulkan_result_get_string(result));
@@ -1110,22 +1027,12 @@ bool vulkan_backend_frame_end()
     // Отправление на выполнение записанного буфера команд.
     // NOTE: Может возникнуть ошибка VUID-vkQueueSubmit-pSignalSemaphores-00067 смотри в описании 'представления
     //       изображения на экран'.
-    VkSubmitInfo submit_info = {
-        .sType                = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-        .waitSemaphoreCount   = 1,
-        .pWaitSemaphores      = &context->image_available_semaphores[current_frame],
-        .pWaitDstStageMask    = &wait_stage,
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores    = &context->image_complete_semaphores[image_index],
-        .commandBufferCount   = 1,
-        .pCommandBuffers      = &cmdbuf,
-    };
-
-    VkQueue graphics_queue = context->device.graphics_queue.handle;
-    result = vkQueueSubmit(graphics_queue, 1, &submit_info, context->in_flight_fences[current_frame]);
-    if(!vulkan_result_is_success(result))
+    if(!vulkan_command_buffer_submit(
+        1, &cmdbuf, context->device.graphics_queue.handle, 1, &context->image_available_semaphores[current_frame],
+        &wait_stage, 1, &context->image_complete_semaphores[image_index], context->in_flight_fences[current_frame]
+    ))
     {
-        LOG_ERROR("Failed to submit queue: %s.", vulkan_result_get_string(result));
+        LOG_ERROR("Failed to submit command buffer at frame: %u.", current_frame);
         return false;
     }
 
@@ -1136,8 +1043,10 @@ bool vulkan_backend_frame_end()
     //       или нет, но есть косвенный способ узнать о завершении благодаря vkAcquireNextImageKHR, т.е. через
     //       ожидание текущего image_available_semaphore[], указывающий, что операция представления изображения
     //       с полученным индексом завершилась.
-    VkQueue present_queue = context->device.present_queue.handle;
-    vulkan_swapchain_present(context, &context->swapchain, present_queue, context->image_complete_semaphores[image_index], image_index);
+    vulkan_swapchain_present(
+        context, &context->swapchain, context->device.present_queue.handle, context->image_complete_semaphores[image_index],
+        image_index
+    );
 
     return true;
 }

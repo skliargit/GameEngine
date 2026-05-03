@@ -1,7 +1,7 @@
 #pragma once
 
 #include <core/defines.h>
-#include <renderer/vulkan/vulkan_types.h>
+#include <renderer/vulkan/types.h>
 
 /**/
 bool vulkan_buffer_create(vulkan_context* context, vulkan_buffer_type type, u64 size, vulkan_buffer* out_buffer);

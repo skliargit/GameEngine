@@ -1,6 +1,6 @@
-#include "renderer/vulkan/vulkan_shader.h"
-#include "renderer/vulkan/vulkan_result.h"
-#include "renderer/vulkan/vulkan_buffer.h"
+#include "renderer/vulkan/shader.h"
+#include "renderer/vulkan/result.h"
+#include "renderer/vulkan/buffer.h"
 
 #include "core/logger.h"
 #include "core/memory.h"

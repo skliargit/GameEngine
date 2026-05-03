@@ -1,4 +1,4 @@
-#include "renderer/vulkan/vulkan_utils.h"
+#include "renderer/vulkan/utils.h"
 
 u32 vulkan_util_find_memory_index(vulkan_device* device, u32 type_bits, VkMemoryPropertyFlags property_flags)
 {

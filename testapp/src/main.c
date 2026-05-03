@@ -94,7 +94,6 @@ static bool game_update(f32 delta_time)
         if(input_key_held('S'))
         {
             camera_move_backward(&cam, speed);
-
         }
 
         if(input_key_held('A'))
