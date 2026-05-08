@@ -16,15 +16,11 @@ bool vulkan_image_create_view(vulkan_context* context, VkFormat format, VkImageA
 
 /**
 */
-// TODO: перенести в шейдер.
-bool vulkan_image_create_sampler(vulkan_context* context, VkSampler* out_sampler);
-
-/**
-*/
 void vulkan_image_destroy(vulkan_context* context, vulkan_image* image);
 
 /**
 */
+// TODO: После упаковки VkImage цепочки обмена в vulkan_image_t можно VkImage* заменить на vulkan_image_t**!!!
 void vulkan_image_transition_layout(VkCommandBuffer cmdbuf, vulkan_image_transition_t transition_op, VkImage* images);
 
 /**

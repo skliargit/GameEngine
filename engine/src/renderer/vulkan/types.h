@@ -7,36 +7,16 @@
 typedef struct platform_window platform_window;
 
 /**
-    @brief Тип буфера данных.
+    @brief Представляет буфер данных в Vulkan.
 */
-typedef enum vulkan_buffer_type {
-    VULKAN_BUFFER_TYPE_VERTEX,                           /**< Использование буфера для вершинных данных.     */
-    VULKAN_BUFFER_TYPE_INDEX,                            /**< Использование буфера для индексных данных.     */
-    VULKAN_BUFFER_TYPE_UNIFORM,                          /**< Использование буфера для uniform переменных.   */
-    VULKAN_BUFFER_TYPE_STAGING,                          /**< Использование буфера для операций копирования. */
-    VULKAN_BUFFER_TYPE_READ,                             /**< Использование буфера для операций чтения.      */
-    VULKAN_BUFFER_TYPE_STORAGE,                          /**< Использование буфера для хранения данных.      */
-} vulkan_buffer_type;
-
-// @brief Представляет буфер данных в Vulkan.
 typedef struct vulkan_buffer {
-    // @brief Тип буфера данных.
-    vulkan_buffer_type type;
-    // @brief Размер буфера данных в байтах.
-    u64 size;
-    // @brief Флаги использования буфера (кеш).
-    VkBufferUsageFlagBits usage;
-    // @brief Флаги свойств памяти (кеш).
-    VkMemoryPropertyFlags memory_property_flags;
-    // @brief Указатель на буфер.
-    VkBuffer handle;
-    // @brief Индекс типа памяти, используемый буфером (кеш).
-    u32 memory_index;
-    // @brief Требования к памяти для буфера (кеш).
-    VkMemoryRequirements memory_requirements;
-    // @brief Выделенная память устройства для буфера.
-    VkDeviceMemory memory;
-} vulkan_buffer;
+    VkBufferUsageFlagBits usage;                         /**< Флаги использования буфера (кеш).               */
+    VkMemoryPropertyFlags memory_property_flags;         /**< Флаги свойств памяти (кеш).                     */
+    VkBuffer handle;                                     /**< Указатель на буфер.                             */
+    u32 memory_index;                                    /**< Индекс типа памяти, используемый буфером (кеш). */
+    VkMemoryRequirements memory_requirements;            /**< Требования к памяти для буфера (кеш).           */
+    VkDeviceMemory memory;                               /**< Выделенная память устройства для буфера.        */
+} vulkan_buffer_t;
 
 /**
     @brief Контекст экземпляра изображения в Vulkan.
@@ -107,6 +87,15 @@ typedef struct vulkan_swapchain {
     u8 max_frames_in_flight;
 } vulkan_swapchain;
 
+/**
+    @brief Контекст менеджера команд.
+*/
+typedef struct vulkan_command_manager {
+    VkDevice device;                              /**< Используемое логическое устройство.   */
+    VkQueue queue;                                /**< Очередь исполнения командных буферов. */
+    VkCommandPool pool;                           /**< Пул для выделения командных буферов.  */
+} vulkan_command_manager_t;
+
 // @brief
 typedef struct vulkan_physical_device {
     // @brief Указатель на физическое устройство (GPU).
@@ -137,8 +126,6 @@ typedef struct vulkan_queue {
     VkQueue handle;
     // @brief Указывает на выделенную очередь.
     bool dedicated;
-    // @brief Указатель на пул команд.
-    VkCommandPool command_pool;
 } vulkan_queue;
 
 // @brief Конфигурация для выбора и настройки физического устройства.
@@ -175,28 +162,17 @@ typedef struct vulkan_device {
     bool supports_host_local_memory;
 } vulkan_device;
 
-// TODO: Изменить с учетом других шейдеров.
-#define MAX_SHADER_STAGES 2
-
-// @brief Представляет шейдер.
+/**
+    @brief Представляет шейдер.
+*/
 typedef struct vulkan_shader {
-    // @brief Макет дескрипторных наборов.
-    VkDescriptorSetLayout descriptor_set_layout;
-    // @brief Макет конвейера, описывающий размещение дескрипторных наборов и push-констант.
-    VkPipelineLayout pipeline_layout;
-    // @brief Указатель на графический конвейер, содержащий компилированные шейдерные модули и другие функций.
-    VkPipeline pipeline;
-    // @brief Пул дескрипторов.
-    VkDescriptorPool descriptor_pool;
-    // @brief Массив дескрипторных наборов (на кадр). Зарезервировано 3, т.к. кол-во кадров в обработке 2-3 (см. max_frames_in_flight).
-    VkDescriptorSet descriptor_sets[3];
-    // @brief Буфер uniform переменных.
-    vulkan_buffer uniform_buffer;
-
-    // TODO: Временно!
-    renderer_camera camera;
-    mat4 model;
-} vulkan_shader;
+    VkPipelineLayout pipeline_layout;               /**< Макет конвейера (размещение дескрипторных наборов и push-констант).    */
+    VkDescriptorSetLayout descriptor_set_layout;    /**< Макет дескрипторных наборов.                                           */
+    VkPipeline pipeline;                            /**< Указатель на графический конвейер (скомпилированные шейдерные модули). */
+    VkDescriptorPool descriptor_pool;               /**< Пул дескрипторов.                                                      */
+    VkDescriptorSet descriptor_sets[3];             /**< Массив дескрипторных наборов (на кадр).                                */
+    bool descriptor_set_updated[3];                 /**< Флаги обновления дескрипторных наборов (на дескриптор, на кадр).       */
+} vulkan_shader_t;
 
 // @brief Основной контекст рендерера.
 typedef struct vulkan_context {
@@ -242,16 +218,15 @@ typedef struct vulkan_context {
     // @brief Массив указателей на объекты синхронизации ... (на изображение).
     VkFence* images_in_flight;
 
+    // @brief Менеджер графических команд.
+    vulkan_command_manager_t graphics_command_manager;
+
     // @brief Буферы команд для графических операций (на кадр).
     VkCommandBuffer* graphics_command_buffers;
-
-    // TODO: Временно!
-    vulkan_shader world_shader;
-
-    // TODO: Временно!
-    u64 vertex_buffer_offset;
-    vulkan_buffer vertex_buffer;
-    u64 index_buffer_offset;
-    vulkan_buffer index_buffer;
-
 } vulkan_context;
+
+// TODO: Временно.
+typedef struct vulkan_texture_map {
+    vulkan_image image;    // Сырые текстурные данные.
+    VkSampler sampler;     // Карта использования текстурных данных + фильтрация.
+} vulkan_texture_map_t;

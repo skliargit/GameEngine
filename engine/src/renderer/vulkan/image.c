@@ -115,39 +115,6 @@ bool vulkan_image_create_view(
     return true;
 }
 
-// TODO: перенести в шейдер.
-bool vulkan_image_create_sampler(vulkan_context* context, VkSampler* out_sampler)
-{
-    // TODO: Сделать полностью настраиваемой.
-    VkSamplerCreateInfo sampler_info = {
-        .sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-        .magFilter               = VK_FILTER_LINEAR,                      // TODO: Заменить
-        .minFilter               = VK_FILTER_LINEAR,                      // TODO: Заменить
-        .addressModeU            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, // TODO: Заменить
-        .addressModeV            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, // TODO: Заменить
-        .addressModeW            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, // TODO: Заменить
-        .anisotropyEnable        = VK_TRUE,                               // TODO: Должно быть в соответсвии с настроками устройства.
-        .maxAnisotropy           = 16,
-        .borderColor             = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-        .unnormalizedCoordinates = VK_FALSE,
-        .compareEnable           = VK_FALSE,
-        .compareOp               = VK_COMPARE_OP_ALWAYS,
-        .mipmapMode              = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-        .mipLodBias              = 0.0f,
-        .minLod                  = 0.0f,
-        .maxLod                  = 0.0f,
-    };
-
-    VkResult result = vkCreateSampler(context->device.logical, &sampler_info, context->allocator, out_sampler);
-    if(!vulkan_result_is_success(result))
-    {
-        LOG_ERROR("Failed to create sampler: %s.", vulkan_result_get_string(result));
-        return false;
-    }
-
-    return true;
-}
-
 void vulkan_image_destroy(vulkan_context* context, vulkan_image* image)
 {
     if(image->view)
@@ -212,8 +179,8 @@ void vulkan_image_transition_layout(VkCommandBuffer cmdbuf, vulkan_image_transit
             image_barriers[0].newLayout     = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
             // Стадии конвейера.
-            src_stage                 = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            dst_stage                 = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            dst_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
             // NOTE: Используется значение image_count по умолчанию.
             break;
@@ -228,8 +195,8 @@ void vulkan_image_transition_layout(VkCommandBuffer cmdbuf, vulkan_image_transit
             image_barriers[0].newLayout     = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
             // Стадии конвейера.
-            src_stage                 = VK_PIPELINE_STAGE_TRANSFER_BIT;
-            dst_stage                 = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            src_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dst_stage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
             // NOTE: Используется значение image_count по умолчанию.
             break;
@@ -249,8 +216,8 @@ void vulkan_image_transition_layout(VkCommandBuffer cmdbuf, vulkan_image_transit
             image_barriers[1].newLayout     = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
 
             // Стадии конвейера.
-            src_stage                 = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            dst_stage                 = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+            src_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            dst_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 
             image_count = 2;
             break;
@@ -259,13 +226,13 @@ void vulkan_image_transition_layout(VkCommandBuffer cmdbuf, vulkan_image_transit
         case VULKAN_IMAGE_TRANSITION_ATTACHMENT_TO_PRESENT:
             // Для буфера цвета.
             image_barriers[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-            image_barriers[0].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            image_barriers[0].dstAccessMask = VK_ACCESS_NONE;
             image_barriers[0].oldLayout     = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
             image_barriers[0].newLayout     = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
             // Стадии конвейера.
-            src_stage                 = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-            dst_stage                 = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+            src_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+            dst_stage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
 
             // NOTE: Используется значение image_count по умолчанию.
             break;

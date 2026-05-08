@@ -4,16 +4,16 @@
 #include "renderer/vulkan/window.h"
 #include "renderer/vulkan/device.h"
 #include "renderer/vulkan/swapchain.h"
-#include "renderer/vulkan/command_buffer.h"
-#include "renderer/vulkan/shader.h"
-#include "renderer/vulkan/buffer.h"
+#include "renderer/vulkan/command.h"
 #include "renderer/vulkan/image.h"
+#include "renderer/vulkan/utils.h"
 
 #include "debug/assert.h"
 #include "core/logger.h"
 #include "core/memory.h"
 #include "core/string.h"
 #include "core/containers/darray.h"
+#include "platform/file.h"
 
 static vulkan_context* context = nullptr;
 
@@ -432,27 +432,18 @@ static void device_destroy()
 static bool command_buffers_create()
 {
     context->graphics_command_buffers = darray_create_custom(VkCommandBuffer, context->swapchain.max_frames_in_flight);
-
-    return vulkan_command_buffer_allocate(
-        context, context->device.graphics_queue.command_pool, context->swapchain.max_frames_in_flight,
-        context->graphics_command_buffers
-    );
+    vulkan_command_buffer_create(&context->graphics_command_manager, context->swapchain.max_frames_in_flight, context->graphics_command_buffers);
+    return true;
 }
 
 static void command_buffers_destroy()
 {
-    if(!context->graphics_command_buffers)
+    if(context->graphics_command_buffers)
     {
-        return;
+        vulkan_command_buffer_destroy(&context->graphics_command_manager, context->swapchain.max_frames_in_flight, context->graphics_command_buffers);
+        darray_destroy(context->graphics_command_buffers);
+        context->graphics_command_buffers = nullptr;
     }
-
-    vulkan_command_buffer_free(
-        context, context->device.graphics_queue.command_pool, context->swapchain.max_frames_in_flight,
-        context->graphics_command_buffers
-    );
-
-    darray_destroy(context->graphics_command_buffers);
-    context->graphics_command_buffers = nullptr;
 }
 
 static bool sync_objects_create()
@@ -546,34 +537,6 @@ static void sync_objects_destroy()
     context->images_in_flight = nullptr;
 }
 
-bool vertex_buffers_create()
-{
-    const u64 vertex_buffer_size  = sizeof(vertex3d) * 1000000;
-    const u64 index_buffer_size   = sizeof(u32) * 1000000;
-    context->vertex_buffer_offset = 0;
-    context->index_buffer_offset  = 0;
-
-    if(!vulkan_buffer_create(context, VULKAN_BUFFER_TYPE_VERTEX, vertex_buffer_size, &context->vertex_buffer))
-    {
-        LOG_ERROR("Failed to create vertex buffer.");
-        return false;
-    }
-
-    if(!vulkan_buffer_create(context, VULKAN_BUFFER_TYPE_INDEX, index_buffer_size, &context->index_buffer))
-    {
-        LOG_ERROR("Failed to create index buffer.");
-        return false;
-    }
-
-    return true;
-}
-
-void vertex_buffers_destroy()
-{
-    vulkan_buffer_destroy(context, &context->vertex_buffer);
-    vulkan_buffer_destroy(context, &context->index_buffer);
-}
-
 bool vulkan_backend_initialize(platform_window* window)
 {
     ASSERT(context == nullptr, "Vulkan backend is already initialized.");
@@ -658,64 +621,12 @@ bool vulkan_backend_initialize(platform_window* window)
     }
     LOG_TRACE("Vulkan graphics command buffers created successfully.");
 
-    // TODO: Временно!
-    if(!vulkan_shader_create(context, &context->world_shader))
-    {
-        LOG_ERROR("Failed to load world shader.");
-        return false;
-    }
-    LOG_TRACE("Vulkan world shader created successfully.");
-
-    // TODO: Временно!
-    if(!vertex_buffers_create())
-    {
-        LOG_ERROR("Failed to create vertex buffers.");
-        return false;
-    }
-    LOG_TRACE("Vulkan buffers created successfully.");
-
-    // TODO: Временно!
-    vertex3d verts[] = {
-        { {{ -0.5, -0.5, 0.0 }}, {{ 1.0, 0.0, 0.0, 1.0 }} }, // 0
-        { {{  0.5,  0.5, 0.0 }}, {{ 0.0, 1.0, 0.0, 1.0 }} }, // 1
-        { {{ -0.5,  0.5, 0.0 }}, {{ 0.0, 0.0, 1.0, 1.0 }} }, // 2
-        { {{  0.5, -0.5, 0.0 }}, {{ 1.0, 1.0, 0.0, 1.0 }} }, // 3
-    };
-    if(!vulkan_buffer_load_data(context, &context->vertex_buffer, 0, sizeof(verts), verts))
-    {
-        LOG_ERROR("Failed to load verts data.");
-        return false;
-    }
-
-    u32 indices[] = {0, 1, 2, 0, 3, 1};
-    if(!vulkan_buffer_load_data(context, &context->index_buffer, 0, sizeof(indices), indices))
-    {
-        LOG_ERROR("Failed to load indices data.");
-        return false;
-    }
-
     LOG_TRACE("Vulkan backend initialized successfully.");
     return true;
 }
 
 void vulkan_backend_shutdown()
 {
-    ASSERT(context != nullptr, "Vulkan backend should be initialized.");
-
-    VkResult result = vkDeviceWaitIdle(context->device.logical);
-    if(!vulkan_result_is_success(result))
-    {
-        LOG_ERROR("Failed to wait device operations.");
-    }
-
-    // TODO: Временно!
-    vertex_buffers_destroy();
-    LOG_TRACE("Vulkan vertex buffers destroy complete.");
-
-    // TODO: Временно!
-    vulkan_shader_destroy(context, &context->world_shader);
-    LOG_TRACE("Vulkan world shader destroy complete.");
-
     command_buffers_destroy();
     LOG_TRACE("Vulkan graphics command buffers destroy complete.");
 
@@ -809,7 +720,16 @@ bool vulkan_backend_is_supported()
     return true;
 }
 
-void vulkan_backend_resize(const u32 width, const u32 height)
+void vulkan_wait_idle_device()
+{
+    VkResult result = vkDeviceWaitIdle(context->device.logical);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to wait device operations.");
+    }
+}
+
+void vulkan_frame_resize(const u32 width, const u32 height)
 {
     context->frame_pending_width = width;
     context->frame_pending_height = height;
@@ -817,7 +737,7 @@ void vulkan_backend_resize(const u32 width, const u32 height)
     LOG_TRACE("Vulkan resize event to %ux%u, generation: %u.", width, height, context->frame_pending_generation);
 }
 
-bool vulkan_backend_frame_begin()
+bool vulkan_frame_begin()
 {
     // Обнаружение изменения размеров окна.
     if(context->frame_generation != context->frame_pending_generation)
@@ -866,25 +786,12 @@ bool vulkan_backend_frame_begin()
         return false;
     }
 
-    // Получение командного буфера и обнуление для повторного использования.
+    // Получение командного буфера, обнуление для повторного использования и начало записи команд текущего кадра.
     // NOTE: То что командный буфер graphics_command_buffers[current_frame] свободен для использования гарантируется
     //       благодаря in_flight_fences[current_frame], который проверяется выше.
     VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
-    if(!vulkan_command_buffer_reset(cmdbuf))
-    {
-        LOG_ERROR("Failed to reset command buffer at frame: %u.", current_frame);
-        return false;
-    }
-
-    // Начало записи команд в текущий буфер команд кадра.
-    if(!vulkan_command_buffer_begin(cmdbuf, false, false, false))
-    {
-        LOG_ERROR("Failed to begin recording command buffer at frame: %u.", current_frame);
-        return false;
-    }
-
-    // TODO: При использовании graphics совместно с present вполне рабочий способ, однако как действовать,
-    //       когда graphics и present работают параллельно?
+    vulkan_command_buffer_reset(cmdbuf);
+    vulkan_command_buffer_begin(cmdbuf, 0);
 
     u32 image_index = context->swapchain.image_index;
 
@@ -951,30 +858,12 @@ bool vulkan_backend_frame_begin()
     // NOTE: При установке количества viewport и scissor их количества должны точно соответствовать заданным для конвейера!
     vkCmdSetViewport(cmdbuf, 0, 1, &viewport);
     vkCmdSetScissor(cmdbuf, 0, 1, &scissor);
-
-    // Использование конвейера.
-    vulkan_shader_use(context, &context->world_shader);
-
-    // Обновление данных камеры и применение их.
-    vulkan_shader_update_camera(context, &context->world_shader, &context->world_shader.camera);
-
-    // Обновление позиции модели.
-    vulkan_shader_update_model(context, &context->world_shader, &context->world_shader.model);
-
-    // Использование буферов для рисования.
-    VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(cmdbuf, 0, 1, &context->vertex_buffer.handle, &offset);
-    vkCmdBindIndexBuffer(cmdbuf, context->index_buffer.handle, offset, VK_INDEX_TYPE_UINT32);
-
-    // vkCmdDraw(cmdbuf, 6, 1, 0, 0);
-    vkCmdDrawIndexed(cmdbuf, 6, 1, 0, 0, 0);
-
     // TODO: Временно. Завершение.
 
     return true;
 }
 
-bool vulkan_backend_frame_end()
+bool vulkan_frame_end()
 {
     VkDevice logical = context->device.logical;
     u32 image_index = context->swapchain.image_index;
@@ -991,11 +880,7 @@ bool vulkan_backend_frame_end()
     vulkan_image_transition_layout(cmdbuf, VULKAN_IMAGE_TRANSITION_ATTACHMENT_TO_PRESENT, images);
 
     // Завершение записи команд в текущий буфер команд кадра.
-    if(!vulkan_command_buffer_end(cmdbuf))
-    {
-        LOG_ERROR("Failed to end recording command buffer at frame: %u.", current_frame);
-        return false;
-    }
+    vulkan_command_buffer_end(cmdbuf);
 
     // Проверка изображения цепочки обмена, что оно еще не используется.
     // NOTE: См. https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#vkQueuePresentKHR
@@ -1027,14 +912,10 @@ bool vulkan_backend_frame_end()
     // Отправление на выполнение записанного буфера команд.
     // NOTE: Может возникнуть ошибка VUID-vkQueueSubmit-pSignalSemaphores-00067 смотри в описании 'представления
     //       изображения на экран'.
-    if(!vulkan_command_buffer_submit(
-        1, &cmdbuf, context->device.graphics_queue.handle, 1, &context->image_available_semaphores[current_frame],
+    vulkan_command_buffer_submit(
+        &context->graphics_command_manager, 1, &cmdbuf, 1, &context->image_available_semaphores[current_frame],
         &wait_stage, 1, &context->image_complete_semaphores[image_index], context->in_flight_fences[current_frame]
-    ))
-    {
-        LOG_ERROR("Failed to submit command buffer at frame: %u.", current_frame);
-        return false;
-    }
+    );
 
     // Представление изображения на экран.
     // NOTE: См. https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html
@@ -1051,13 +932,906 @@ bool vulkan_backend_frame_end()
     return true;
 }
 
-void vulkan_backend_update_camera(const mat4* proj, const mat4* view)
+void vulkan_frame_bind_shader(shader_t* shader)
 {
-    context->world_shader.camera.proj = *proj;
-    context->world_shader.camera.view = *view;
+    u32 current_frame = context->swapchain.current_frame;
+    VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
+    vulkan_shader_t* vk_shader = shader->internal_data;
+
+    // TODO: Настраиваемая точка привязки (графика или вычисления).
+    vkCmdBindPipeline(cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_shader->pipeline);
 }
 
-void vulkan_backend_update_model(const mat4* model)
+void vulkan_frame_bind_buffer(buffer_t* buffer, const usize buffer_offset)
 {
-    context->world_shader.model = *model;
+    u32 current_frame = context->swapchain.current_frame;
+    VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
+    vulkan_buffer_t* vk_buffer = buffer->internal_data;
+
+    switch(buffer->type)
+    {
+        case BUFFER_TYPE_VERTEX:
+            // TODO: Настраиваемая.
+            vkCmdBindVertexBuffers(cmdbuf, 0, 1, &vk_buffer->handle, &buffer_offset);
+            break;
+        case BUFFER_TYPE_INDEX:
+            // TODO: Настраиваемая.
+            vkCmdBindIndexBuffer(cmdbuf, vk_buffer->handle, buffer_offset, VK_INDEX_TYPE_UINT32);
+            break;
+        case BUFFER_TYPE_UNIFORM:
+        case BUFFER_TYPE_STAGING:
+        case BUFFER_TYPE_READ:
+        case BUFFER_TYPE_STORAGE:
+            LOG_ERROR("Current buffer binding is not supported.");
+            break;
+        }
+}
+
+void vulkan_frame_draw(const u32 vertex_count)
+{
+    u32 current_frame = context->swapchain.current_frame;
+    VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
+    vkCmdDraw(cmdbuf, vertex_count, 1, 0, 0);
+}
+
+void vulkan_frame_draw_indexed(const u32 index_count)
+{
+    u32 current_frame = context->swapchain.current_frame;
+    VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
+    vkCmdDrawIndexed(cmdbuf, index_count, 1, 0, 0, 0);
+}
+
+// Указывает на использование только локальной памяти (VRAM only).
+static inline bool buffer_is_device_local_only(vulkan_buffer_t* vk_buffer)
+{
+    return (vk_buffer->memory_property_flags & (VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+}
+
+static void buffer_copy_range(vulkan_buffer_t* src, usize src_offset, vulkan_buffer_t* dst, usize dst_offset, usize size)
+{
+    VkBufferCopy region = {
+        .srcOffset = src_offset,
+        .dstOffset = dst_offset,
+        .size      = size
+    };
+
+    VkCommandBuffer cmdbuf;
+    vulkan_command_buffer_begin_single_use(&context->graphics_command_manager, &cmdbuf);
+    vkCmdCopyBuffer(cmdbuf, src->handle, dst->handle, 1, &region);
+    vulkan_command_buffer_end_single_use(&context->graphics_command_manager, cmdbuf);
+
+    // TODO:
+    // Барьер гарантирует, что операции после него получат обновленный буфер данных на необходимой стадии.
+    // VkBufferMemoryBarrier buffer_barrier = {
+    //     .sType               = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+    //     .srcAccessMask       = VK_ACCESS_TRANSFER_WRITE_BIT,
+    //     .dstAccessMask       = VK_ACCESS_MEMORY_READ_BIT,
+    //     .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //     .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+    //     .buffer              = dst->handle,
+    //     .offset              = dst_offset,
+    //     .size                = size
+    // };
+
+    // switch(dst->type)
+    // {
+    //     case VULKAN_BUFFER_TYPE_VERTEX:
+    //     case VULKAN_BUFFER_TYPE_INDEX:
+    //         buffer_barrier.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    //         break;
+    //     case VULKAN_BUFFER_TYPE_UNIFORM:
+    //         buffer_barrier.dstAccessMask = VK_ACCESS_UNIFORM_READ_BIT;
+    //         break;
+    //     default:
+    //     case VULKAN_BUFFER_TYPE_STAGING:
+    //     case VULKAN_BUFFER_TYPE_READ:
+    //     case VULKAN_BUFFER_TYPE_STORAGE:
+    //         LOG_ERROR("No support buffer type for copy operation yet.");
+    //         return;
+    // }
+
+    // vkCmdPipelineBarrier(
+    //     cmdbuf, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, nullptr, 1, &buffer_barrier, 0, nullptr
+    // );
+}
+
+bool vulkan_buffer_acquire_resources(buffer_t* buffer)
+{
+    buffer->internal_data = mallocate(sizeof(vulkan_buffer_t), MEMORY_TAG_RENDERER);
+    vulkan_buffer_t* vk_buffer = buffer->internal_data;
+    mzero(vk_buffer, sizeof(vulkan_buffer_t));
+
+    switch(buffer->type)
+    {
+        case BUFFER_TYPE_VERTEX:
+            vk_buffer->usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            vk_buffer->memory_property_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            break;
+        case BUFFER_TYPE_INDEX:
+            vk_buffer->usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            vk_buffer->memory_property_flags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            break;
+        case BUFFER_TYPE_STAGING:
+            vk_buffer->usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+            vk_buffer->memory_property_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            break;
+        case BUFFER_TYPE_UNIFORM:
+            vk_buffer->usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            vk_buffer->memory_property_flags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            vk_buffer->memory_property_flags |= context->device.supports_host_local_memory ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT : 0;
+            break;
+        case BUFFER_TYPE_READ:
+        case BUFFER_TYPE_STORAGE:
+        default:
+            LOG_ERROR("Buffer type %u is not yet supported.", buffer->type);
+            return false;
+    }
+
+    VkBufferCreateInfo buffer_info = {
+        .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size        = buffer->size,
+        .usage       = vk_buffer->usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE // TODO: Добавить поддержку совместного использования семействами очередей.
+    };
+
+    VkResult result = vkCreateBuffer(context->device.logical, &buffer_info, context->allocator, &vk_buffer->handle);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create buffer type %u: %s.", buffer->type, vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Получение требований памяти.
+    vkGetBufferMemoryRequirements(context->device.logical, vk_buffer->handle, &vk_buffer->memory_requirements);
+
+    // Получение индекса типа памяти.
+    vk_buffer->memory_index = vulkan_util_find_memory_index(&context->device, vk_buffer->memory_requirements.memoryTypeBits, vk_buffer->memory_property_flags);
+    if(vk_buffer->memory_index == INVALID_ID32)
+    {
+        LOG_ERROR("Failed to find memory index for buffer type %u.", buffer->type);
+        return false;
+    }
+
+    // Выделение памяти.
+    VkMemoryAllocateInfo memory_allocate_info = {
+        .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize  = vk_buffer->memory_requirements.size,
+        .memoryTypeIndex = vk_buffer->memory_index
+    };
+
+    result = vkAllocateMemory(context->device.logical, &memory_allocate_info, context->allocator, &vk_buffer->memory);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to allocate memory for buffer type %u: %s.", buffer->type, vulkan_result_get_string(result));
+        return false;
+    }
+
+    // TODO: Выделять большой кусок и выполнять связывание с ним буферов.
+    result = vkBindBufferMemory(context->device.logical, vk_buffer->handle, vk_buffer->memory, 0);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to bind memory buffer of type %u: %s.", buffer->type, vulkan_result_get_string(result));
+        return false;
+    }
+
+    return true;
+}
+
+void vulkan_buffer_release_resources(buffer_t* buffer)
+{
+    vulkan_buffer_t* vk_buffer = buffer->internal_data;
+
+    if(vk_buffer->memory != nullptr)
+    {
+        vkFreeMemory(context->device.logical, vk_buffer->memory, context->allocator);
+    }
+
+    if(vk_buffer->handle != nullptr)
+    {
+        vkDestroyBuffer(context->device.logical, vk_buffer->handle, context->allocator);
+    }
+
+    mfree(vk_buffer, sizeof(vulkan_buffer_t), MEMORY_TAG_RENDERER);
+}
+
+bool vulkan_buffer_resize(buffer_t* buffer, usize new_size)
+{
+    vulkan_buffer_t* vk_buffer = buffer->internal_data;
+
+    VkBufferCreateInfo buffer_info = {
+        .sType       = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size        = new_size,
+        .usage       = vk_buffer->usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE // TODO: Добавить поддержку совместного использования семействами очередей.
+    };
+
+    vulkan_buffer_t new_buffer = {0};
+    VkResult result = vkCreateBuffer(context->device.logical, &buffer_info, context->allocator, &new_buffer.handle);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to resize buffer type %u: %s.", buffer->type, vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Получение новых требований памяти.
+    vkGetBufferMemoryRequirements(context->device.logical, new_buffer.handle, &new_buffer.memory_requirements);
+
+    // Выделение новой памяти.
+    VkMemoryAllocateInfo memory_allocate_info = {
+        .sType           = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize  = new_buffer.memory_requirements.size,
+        .memoryTypeIndex = vk_buffer->memory_index
+    };
+
+    result = vkAllocateMemory(context->device.logical, &memory_allocate_info, context->allocator, &new_buffer.memory);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to allocate memory to resize buffer of type %u: %s.", buffer->type, vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Привязывание новой памяти для выполнения операций с ней.
+    result = vkBindBufferMemory(context->device.logical, new_buffer.handle, new_buffer.memory, 0);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to bind memory to resize buffer of type %u: %s.", buffer->type, vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Копирование данных из старой памяти в новую.
+    buffer_copy_range(vk_buffer, 0, &new_buffer, 0, buffer->size);
+
+    // Освобождение памяти старого буфера.
+    if(vk_buffer->memory != nullptr)
+    {
+        vkFreeMemory(context->device.logical, vk_buffer->memory, context->allocator);
+    }
+
+    // Уничтожение старого буфера.
+    if(vk_buffer->handle != nullptr)
+    {
+        vkDestroyBuffer(context->device.logical, vk_buffer->handle, context->allocator);
+    }
+
+    // Обновление указателей и данных буфера.
+    buffer->size = new_size;
+    vk_buffer->handle = new_buffer.handle;
+    vk_buffer->memory = new_buffer.memory;
+    vk_buffer->memory_requirements = new_buffer.memory_requirements;
+
+    return true;
+}
+
+bool vulkan_buffer_map_memory(buffer_t* buffer, usize offset, usize size, void** data)
+{
+    vulkan_buffer_t* vk_buffer = buffer->internal_data;
+    VkResult result = vkMapMemory(context->device.logical, vk_buffer->memory, offset, size, 0, data);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to map memory buffer of type %u: %s.", buffer->type, vulkan_result_get_string(result));
+        return false;
+    }
+
+    return true;
+}
+
+void vulkan_buffer_unmap_memory(buffer_t* buffer)
+{
+    vulkan_buffer_t* vk_buffer = buffer->internal_data;
+    vkUnmapMemory(context->device.logical, vk_buffer->memory);
+}
+
+bool vulkan_buffer_load_range(buffer_t* buffer, usize offset, usize size, const void* data)
+{
+    vulkan_buffer_t* vk_buffer = buffer->internal_data;
+
+    if(buffer_is_device_local_only(vk_buffer))
+    {
+        // Создание промежуточного буфера для загрузки в видеопамять.
+        buffer_t staging = { .type = BUFFER_TYPE_STAGING, .size = size };
+        if(!vulkan_buffer_acquire_resources(&staging))
+        {
+            LOG_ERROR("Failed to create staging buffer.");
+            return false;
+        }
+
+        vulkan_buffer_load_range(&staging, 0, size, data);
+        vulkan_buffer_copy_range(&staging, 0, buffer, offset, size);
+
+        // NOTE: Была идея в том, что бы вынести создание командного буфера наружу из всех функций, но
+        //       вот фигня, при текущей логике пока запись буфера идет, мы уничтожаем временный буфер
+        //       с данными и поэтому vkCmdCopyBuffer просто нет доступа к staging!!!
+        // TODO: Пересмотреть логику работы функции!
+        vulkan_buffer_release_resources(&staging);
+    }
+    // Копирование без промежуточного буфера.
+    else
+    {
+        // NOTE: Неявная синхронизация памяти при наличии флага HOST_COHERENT по каманде vkQueueSubmit().
+        void* mapped_data = nullptr;
+        if(!vulkan_buffer_map_memory(buffer, offset, size, &mapped_data))
+        {
+            LOG_ERROR("Failed to mapping memory buffer.");
+            return false;
+        }
+
+        mcopy(mapped_data, data, size);
+        vulkan_buffer_unmap_memory(buffer);
+        // TODO: Применение flash если не флага памяти HOST_COHERENT!
+    }
+
+    return true;
+}
+
+void vulkan_buffer_copy_range(buffer_t* src, usize src_offset, buffer_t* dst, usize dst_offset, usize size)
+{
+    buffer_copy_range(src->internal_data, src_offset, dst->internal_data, dst_offset, size);
+}
+
+static bool shader_create_modules(u32 stage_count, shader_stage_file_t* stage_files, VkPipelineShaderStageCreateInfo* out_stages)
+{
+    // Очистка структуры.
+    mzero(out_stages, sizeof(VkPipelineShaderStageCreateInfo) * stage_count);
+
+    // Создание модулей шейдеров и формирование объектов программируемых стадий конвейера.
+    for(u32 i = 0; i < stage_count; ++i)
+    {
+        platform_file* file;
+
+        if(platform_file_exists(stage_files[i].path) == false)
+        {
+            LOG_ERROR("Shader file '%s' does not exist.", stage_files[i].path);
+            return false;
+        }
+
+        // TODO: Систему ресурсов.
+        if(platform_file_open(stage_files[i].path, PLATFORM_FILE_MODE_READ_BINARY, &file) == false)
+        {
+            LOG_ERROR("Unable to read shader file '%s'.", stage_files[i].path);
+            return false;
+        }
+
+        u64 file_size = 0;
+        if(platform_file_size(file, &file_size) == false)
+        {
+            LOG_ERROR("Unable to get size of shader file '%s'.", stage_files[i].path);
+            return false;
+        }
+
+        u64 check_file_size = 0;
+        u32* shader_bytes = mallocate(file_size, MEMORY_TAG_UNKNOWN);
+        if(platform_file_read(file, file_size, shader_bytes, &check_file_size) == false || check_file_size != file_size)
+        {
+            LOG_ERROR("Unable to read data from shader file '%s'.", stage_files[i].path);
+            return false;
+        }
+
+        LOG_DEBUG("Shader file '%s' of size %u read successfully.", stage_files[i].path, file_size);
+
+        // Закрытие файла.
+        platform_file_close(file);
+        file = nullptr;
+
+        VkShaderModuleCreateInfo shader_module_info = {
+            .sType    = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .codeSize = file_size,
+            .pCode    = shader_bytes
+        };
+
+        VkResult result = vkCreateShaderModule(context->device.logical, &shader_module_info, context->allocator, &out_stages[i].module);
+        if(!vulkan_result_is_success(result))
+        {
+            LOG_ERROR("Failed to create shader module from file '%s': %s.", stage_files[i].path, vulkan_result_get_string(result));
+            return false;
+        }
+
+        // Освобождение памяти для бинарных данных шейдера.
+        mfree(shader_bytes, file_size, MEMORY_TAG_UNKNOWN);
+        shader_bytes = nullptr;
+
+        out_stages[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        out_stages[i].pName = "main"; // TODO: Сделать настраиваемой.
+
+        switch(stage_files[i].stage)
+        {
+            case SHADER_STAGE_VERTEX:
+                out_stages[i].stage = VK_SHADER_STAGE_VERTEX_BIT;
+                break;
+            case SHADER_STAGE_FRAGMENT:
+                out_stages[i].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+                break;
+            default:
+                LOG_ERROR("Unsupported shader stage: %d.", stage_files->stage);
+                return false;
+        }
+    }
+
+    return true;
+}
+
+static void shader_destroy_modules(u32 stage_count, VkPipelineShaderStageCreateInfo* stages)
+{
+    for(u32 i = 0; i < stage_count; ++i)
+    {
+        if(stages[i].module != nullptr)
+        {
+            vkDestroyShaderModule(context->device.logical, stages[i].module, context->allocator);
+        }
+    }
+
+    mzero(stages, sizeof(VkPipelineShaderStageCreateInfo) * stage_count);
+}
+
+bool vulkan_shader_acquire_resources(shader_t* shader, u32 stage_count, shader_stage_file_t* stage_files)
+{
+    shader->internal_data = mallocate(sizeof(vulkan_shader_t), MEMORY_TAG_RENDERER);
+    vulkan_shader_t* vk_shader = shader->internal_data;
+
+    // Создание программируемых стадий конфейера.
+    VkPipelineShaderStageCreateInfo stages[SHADER_MAX_STAGES];
+    if(!shader_create_modules(stage_count, stage_files, stages))
+    {
+        LOG_ERROR("Failed to create shader stages.");
+        return false;
+    }
+
+    // Атрибуты конвейера (входящие данные вершинного шейдера).
+    // TODO: Настраиваемый.
+    VkVertexInputBindingDescription binding_descriptions[] = {
+        // Описание данных и частоты обновления каждой вершины для vertex3d.
+        {
+            .binding   = 0,                           // Индекс размещения (привязки) данных.
+            .stride    = sizeof(vertex3d),            // Размер выршины (шаг данных). // TODO: Выравнивание для производительности!
+            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX  // Частота обновления данных: для каждой вершины. // TODO: Инстансинг!
+        }
+    };
+ 
+    // TODO: Настраиваемый.
+    VkVertexInputAttributeDescription attribute_descriptions[] = {
+        // Описание атрибутов для vertex3d.
+        // Position.
+        {
+            .binding  = 0,                             // Индекс размещения (привязки, см. описание выше).
+            .location = 0,                             // Номер смещения данных вершины для шейдера / layout(location = 0) in vec3 in_position.
+            .format   = VK_FORMAT_R32G32B32_SFLOAT,    // Размер и тип передаваемых данных.
+            .offset   = OFFSET_OF(vertex3d, position)  // Смещение от начала данных вершины в байтах.
+        },
+        // Color
+        {
+            .binding  = 0,                             // Индекс размещения (привязки, см. описание выше).
+            .location = 1,                             // Номер смещения данных вершины для шейдера / layout(location = 1) in vec4 in_color.
+            .format   = VK_FORMAT_R32G32B32A32_SFLOAT, // Размер и тип передаваемых данных.
+            .offset   = OFFSET_OF(vertex3d, color)     // Смещение от начала данных вершины в байтах.
+        }
+    };
+
+    VkPipelineVertexInputStateCreateInfo vertex_input_state = {
+        .sType                           = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount   = ARRAY_SIZE(binding_descriptions),   // Кол-во размещений (привязок).
+        .pVertexBindingDescriptions      = binding_descriptions,
+        .vertexAttributeDescriptionCount = ARRAY_SIZE(attribute_descriptions), // Кол-во атрибутов.
+        .pVertexAttributeDescriptions    = attribute_descriptions,
+    };
+
+    // Наборы дескрипторов конвейера.
+    // TODO: Получить и проверить maxBoundDescriptorSets в VkPhysicalDeviceLimits через vkGetPhysicalDeviceProperties()!
+    // TODO: Настраиваемые размещения (привязки).
+    VkDescriptorSetLayoutBinding descriptor_set_bindings[] = {
+        // Uniform буфер для вершиного шейдера.
+        {
+            .binding            = 0,                                 // Индекс размещения (привязки) данных для uniform переменной.
+            .descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // Тип связываемого дескриптора - uniform переменная.
+            .descriptorCount    = 1,                                 // Кол-во связываемых дескрипторов с шейдером (например, передача массива в шейдер).
+            .stageFlags         = VK_SHADER_STAGE_VERTEX_BIT,        // Стадия в которую передаются uniform переменные.
+            .pImmutableSamplers = nullptr
+        }
+        // TODO: Другие размещения (привязки) данных: сэмплеры для фрагментного шейдера.
+    };
+
+    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info = {
+        .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .pNext        = nullptr,
+        .flags        = 0,
+        .bindingCount = ARRAY_SIZE(descriptor_set_bindings),         // Кол-во размещений (привязок).
+        .pBindings    = descriptor_set_bindings
+    };
+
+    VkResult result = vkCreateDescriptorSetLayout(context->device.logical, &descriptor_set_layout_info, context->allocator, &vk_shader->descriptor_set_layout);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create descriptor set layouts: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Push константы конвейера.
+    VkPushConstantRange push_constants[] = {
+        // Матрица модели.
+        {
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+            .offset     = 0,
+            .size       = sizeof(renderer_model_t)
+        }
+    };
+
+    // Макет конвейера, описывающий размещение (привязки) дескрипторных наборов и push-констант.
+    VkPipelineLayoutCreateInfo pipeline_layout_info = {
+        .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount         = 1,                                  // TODO: Настраиваемый.
+        .pSetLayouts            = &vk_shader->descriptor_set_layout,  // TODO: Настраиваемый.
+        .pushConstantRangeCount = ARRAY_SIZE(push_constants),         // TODO: Настраиваемый.
+        .pPushConstantRanges    = push_constants                      // TODO: Настраиваемый.
+    };
+
+    result = vkCreatePipelineLayout(context->device.logical, &pipeline_layout_info, context->allocator, &vk_shader->pipeline_layout);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create graphics pipeline layout: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Настройка сборочного этапа конвейера.
+    // NOTE: Если в поле primitiveRestartEnable задать значение VK_TRUE, можно прервать отрезки и треугольники с
+    //       топологией VK_PRIMITIVE_TOPOLOGY_LINE_STRIP и VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP и начать рисовать
+    //       новые примитивы, используя специальный индекс 0xFFFF или 0xFFFFFFFF.
+    VkPipelineInputAssemblyStateCreateInfo input_assembly_state = {
+        .sType                  = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology               = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST, // TODO: Настраиваемый (В данном момент вершины собираются в треугольники).
+        .primitiveRestartEnable = VK_FALSE
+    };
+
+    // TODO: Тесселяция.
+
+    // Область видимости и отсечение.
+    // TODO: Множественные области видимости и отсечения!
+    // NOTE: Т.к. используется динамическое состояние для viewport и scissor, то в указатели передается nullptr,
+    //       но значения должны быть установленны обязательно больше нуля.
+    VkPipelineViewportStateCreateInfo viewport_state = {
+        .sType         = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,        // TODO: Настраиваемый.
+        .pViewports    = nullptr,
+        .scissorCount  = 1,        // TODO: Настраиваемый.
+        .pScissors     = nullptr 
+    };
+
+    // Настройка растерезаующего этапа конвейера.
+    // NOTE: Координаты в 3D (и 2D) часто связаны с вращением против часовой стрелки из-за «правила правой руки» в математике
+    //       и физике, где положительное вращение определяется направлением от оси X к оси Y (против часовой стрелки), что
+    //       является стандартным соглашением для определения ориентации и векторов в пространстве, делая многие формулы
+    //       более элегантными.
+    VkPipelineRasterizationStateCreateInfo rasterization_state = {
+        .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .depthClampEnable        = VK_FALSE,                        // Отсекать фрагменты за пределами дальней и ближней плоскости???
+        .rasterizerDiscardEnable = VK_FALSE,                        // Выполнять растерезацию и передавать во фреймбуфер.
+        .polygonMode             = VK_POLYGON_MODE_FILL,            // Ребра полигона отрезки (VK_POLYGON_MODE_LINE) или полигон полностью заполняет фрагмент (VK_POLYGON_MODE_FILL).
+        .cullMode                = VK_CULL_MODE_BACK_BIT,           // Тип отсечения поверхностей (VK_CULL_MODE_*: NONE, FRONT, FRONT_AND_BACK, BACK).
+        .frontFace               = VK_FRONT_FACE_COUNTER_CLOCKWISE, // Порядок обхода вершин (на данный момент - против часовой стрелки).
+        .depthBiasEnable         = VK_FALSE,                        // TODO: Нужно ли использовать? Для изменения значения глубины?
+        .depthBiasConstantFactor = 0.0f,                            // TODO: Настраиваемый.
+        .depthBiasClamp          = 0.0f,                            // TODO: Настраиваемый.
+        .depthBiasSlopeFactor    = 0.0f,                            // TODO: Настраиваемый.
+        .lineWidth               = 1.0f                             // TODO: Ширина линии (динамическое состояние).
+    };
+
+    // Фильтрация.
+    VkPipelineMultisampleStateCreateInfo multisample_state = {
+        .sType                 = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples  = VK_SAMPLE_COUNT_1_BIT, // Без сглаживания.
+        .sampleShadingEnable   = VK_FALSE,              // TODO: Нужно ли использовать???
+        .minSampleShading      = 1.0f,                  // TODO: Настраиваемый.
+        .pSampleMask           = nullptr,               // TODO: Настраиваемый.
+        .alphaToCoverageEnable = VK_FALSE,              // TODO: Настраиваемый.
+        .alphaToOneEnable      = VK_FALSE               // TODO: Настраиваемый.
+    };
+
+    // Тест глубины и трафарета.
+    VkPipelineDepthStencilStateCreateInfo depth_stencil_state = {
+        .sType                 = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable       = VK_TRUE,             // TODO: Настраиваемый.
+        .depthWriteEnable      = VK_TRUE,             // TODO: Настраиваемый.
+        .depthCompareOp        = VK_COMPARE_OP_LESS,  // TODO: Настраиваемый.
+        .depthBoundsTestEnable = VK_FALSE,            // TODO: Настраиваемый.
+        .stencilTestEnable     = VK_FALSE,            // TODO: Настраиваемый.
+        // .front                 = ,                    // TODO: Настраиваемый.
+        // .back                  = ,                    // TODO: Настраиваемый.
+        // .minDepthBounds        = 0.0f,                // TODO: Настраиваемый.
+        // .maxDepthBounds        = 0.0f                 // TODO: Настраиваемый.
+    };
+
+    // Настройка смешивания цветов.
+    // TODO: Множественные вложения!
+    // NOTE: Источник - то что рисуется (верхний слой), назначение - то что нарисовано в изображении (нижний слой).
+    // NOTE: Количество элементов должно соответствовать количеству attachment-ов передаваемых при динамическом рендере,
+    //       а так же количеству выходных vec4 векторов во фрагментном шейдере!
+    VkPipelineColorBlendAttachmentState color_blend_attachments[] = {
+        // NOTE: Соответствует строке в фрагментном шейдере layout(location = 0) out vec4 out_color.
+        {
+            .blendEnable         = VK_TRUE,
+            .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .colorBlendOp        = VK_BLEND_OP_ADD,
+            .srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+            .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+            .alphaBlendOp        = VK_BLEND_OP_ADD,
+            .colorWriteMask      = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                                 | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+        },
+    };
+
+    VkPipelineColorBlendStateCreateInfo color_blend_state = {
+        .sType           = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .logicOpEnable   = VK_FALSE,                            // TODO: Настраиваемый.
+        .logicOp         = VK_LOGIC_OP_COPY,                    // TODO: Настраиваемый.
+        .attachmentCount = ARRAY_SIZE(color_blend_attachments), // TODO: Настраиваемый.
+        .pAttachments    = color_blend_attachments,             // TODO: Настраиваемый.
+        // .blendConstants  = ,                                    // TODO: Настраиваемый.
+    };
+
+    // TODO: Настраиваемый в соответствиие с передаваемым количеством цветовых attachment-ов при начале динамического
+    //       рендеринга, буфер глубины не учитывается. Не забыть про color_blend_state, смотри выше!!!
+    VkPipelineRenderingCreateInfo rendering_info = {
+        .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+        .viewMask                = 0,
+        .colorAttachmentCount    = 1,                                        // TODO: Должен соответствовать color_blend_attachment_count!!!
+        .pColorAttachmentFormats = &context->swapchain.image_format.format,  // TODO: Должен быть массив форматов для каждого attachment.
+        .depthAttachmentFormat   = context->swapchain.depth_format,
+        .stencilAttachmentFormat = VK_FORMAT_UNDEFINED
+    };
+
+    // Динамическое состояние: Позволяет менять состояние графического конвейера не создавая занаво.
+    //                         В результате эти настройки нужно указывать прямо перед командой отрисовки.
+    VkDynamicState dynamic_states[] = {
+        VK_DYNAMIC_STATE_VIEWPORT,    // Изменение вьюпорта.
+        VK_DYNAMIC_STATE_SCISSOR,     // Изменение отсечение вьюпорта.
+        VK_DYNAMIC_STATE_LINE_WIDTH   // Изменение ширины отрезков (см. растеризатор).
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamic_state = {
+        .sType             = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = ARRAY_SIZE(dynamic_states),    // Кол-во динамических состояний.
+        .pDynamicStates    = dynamic_states
+    };
+
+    // Создание графического конвейера.
+    VkGraphicsPipelineCreateInfo graphics_pipeline = {
+        .sType               = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .pNext               = &rendering_info,
+        .stageCount          = stage_count,
+        .pStages             = stages,
+        .layout              = vk_shader->pipeline_layout,
+        .pVertexInputState   = &vertex_input_state,
+        .pInputAssemblyState = &input_assembly_state,
+        .pTessellationState  = nullptr,
+        .pViewportState      = &viewport_state,
+        .pRasterizationState = &rasterization_state,
+        .pMultisampleState   = &multisample_state,
+        .pDepthStencilState  = &depth_stencil_state,
+        .pColorBlendState    = &color_blend_state,
+        .pDynamicState       = &dynamic_state,
+        .renderPass          = nullptr,                     // NOTE: Используется динамический рендеринг.
+        .subpass             = 0,
+        .basePipelineHandle  = nullptr,
+        .basePipelineIndex   = -1
+    };
+
+    result = vkCreateGraphicsPipelines(context->device.logical, nullptr, 1, &graphics_pipeline, context->allocator, &vk_shader->pipeline);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create graphics pipeline: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
+    // NOTE: Шейдерные модули представляют собой байт-код, и после создания конвейера их можно удалить,
+    //       т.к. байт-код компилируется в машинный код и становится частью конвейера.
+    shader_destroy_modules(stage_count, stages);
+
+    // Пул дескрипторов.
+    VkDescriptorPoolSize descriptor_pool_sizes[] = {
+        {
+            .type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = context->swapchain.max_frames_in_flight      // на кадр TODO: максимальный или max_frames_in_flight.
+        }
+    };
+
+    VkDescriptorPoolCreateInfo descriptor_pool_info = {
+        .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .pNext         = nullptr,
+        .flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, // Указывает на возможность изменения набора дескрипторов.
+        .maxSets       = context->swapchain.max_frames_in_flight,           // Максамально возможное кол-во наборов дескрипторов TODO: максимальный или max_frames_in_flight.
+        .poolSizeCount = ARRAY_SIZE(descriptor_pool_sizes),                 // Кол-во описаний размеров пула.
+        .pPoolSizes    = descriptor_pool_sizes
+    };
+
+    result = vkCreateDescriptorPool(context->device.logical, &descriptor_pool_info, context->allocator, &vk_shader->descriptor_pool);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create descriptor pool: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
+    // Выделение дескрипторных наборов (по одному на кадр).
+    // Зарезервировано 3, т.к. кол-во кадров в обработке 2-3 (см. max_frames_in_flight).
+    VkDescriptorSetLayout descriptor_set_layouts[3] = {
+        vk_shader->descriptor_set_layout,
+        vk_shader->descriptor_set_layout,
+        vk_shader->descriptor_set_layout
+    };
+
+    VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
+        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .pNext              = nullptr,
+        .descriptorPool     = vk_shader->descriptor_pool,
+        .descriptorSetCount = context->swapchain.max_frames_in_flight,
+        .pSetLayouts        = descriptor_set_layouts
+    };
+
+    result = vkAllocateDescriptorSets(context->device.logical, &descriptor_set_allocate_info, vk_shader->descriptor_sets);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to allocate descriptor sets: %s.", vulkan_result_get_string(result));
+        return false;
+    }
+
+    return true;
+}
+
+void vulkan_shader_release_resources(shader_t* shader)
+{
+    vulkan_shader_t* vk_shader = shader->internal_data;
+
+    // NOTE: Уничтожение shader->descriptor_sets происходит при уничтожении shader->descriptor_sets.
+    if(vk_shader->descriptor_pool != nullptr)
+    {
+        vkDestroyDescriptorPool(context->device.logical, vk_shader->descriptor_pool, context->allocator);
+    }
+
+    if(vk_shader->pipeline != nullptr)
+    {
+        vkDestroyPipeline(context->device.logical, vk_shader->pipeline, context->allocator);
+    }
+
+    if(vk_shader->pipeline_layout != nullptr)
+    {
+        vkDestroyPipelineLayout(context->device.logical, vk_shader->pipeline_layout, context->allocator);
+    }
+
+    if(vk_shader->descriptor_set_layout != nullptr)
+    {
+        vkDestroyDescriptorSetLayout(context->device.logical, vk_shader->descriptor_set_layout, context->allocator);
+    }
+
+    mfree(vk_shader, sizeof(vulkan_shader_t), MEMORY_TAG_RENDERER);
+}
+
+void vulkan_shader_update_camera(shader_t* shader, renderer_camera_t* camera)
+{
+    u32 current_frame = context->swapchain.current_frame;
+    VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
+    vulkan_shader_t* vk_shader = shader->internal_data;
+    VkDescriptorSet descriptor_set = vk_shader->descriptor_sets[current_frame];
+
+    // Указание в какую часть буфера зугружать данные.
+    u64 load_size = sizeof(renderer_camera_t);
+    u64 load_offset = current_frame * load_size;
+
+    // Загрузка новых данных в буфер.
+    vulkan_buffer_load_range(&shader->uniform_buffer, load_offset, load_size, camera);
+
+    // Обновление дескрипторного набора.
+    VkDescriptorBufferInfo descriptor_buffer_info = {
+        .buffer = ((vulkan_buffer_t*)shader->uniform_buffer.internal_data)->handle,
+        .offset = load_offset,
+        .range  = load_size
+    };
+
+    VkWriteDescriptorSet write_descriptor_set = {
+        .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext            = nullptr,
+        .dstSet           = descriptor_set,
+        .dstBinding       = 0,
+        .dstArrayElement  = 0,
+        .descriptorCount  = 1,
+        .descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pImageInfo       = nullptr,
+        .pBufferInfo      = &descriptor_buffer_info,
+        .pTexelBufferView = nullptr
+    };
+
+    vkUpdateDescriptorSets(context->device.logical, 1, &write_descriptor_set, 0, nullptr);
+
+    // Привязка набора дескрипторов к размещению для обновления.
+    vkCmdBindDescriptorSets(cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_shader->pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
+}
+
+void vulkan_shader_update_model(shader_t* shader, renderer_model_t* model)
+{
+    u32 current_frame = context->swapchain.current_frame;
+    VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
+    vulkan_shader_t* vk_shader = shader->internal_data;
+
+    vkCmdPushConstants(cmdbuf, vk_shader->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(renderer_model_t), model);
+}
+
+void vulkan_texture_acquire_resources(texture_t* t, const void* data)
+{
+    t->internal_data = mallocate(sizeof(vulkan_texture_map_t), MEMORY_TAG_TEXTURE);
+    vulkan_texture_map_t* map = t->internal_data;
+    mzero(map, sizeof(vulkan_texture_map_t));
+
+    VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
+    u32 image_size = t->width * t->height * t->channels;
+
+    // 1. Создание изображения и промежуточного буфера для закрузки в него данных.
+    if(!vulkan_image_create(
+        context, t->width, t->height, image_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &map->image
+    ))
+    {
+        LOG_ERROR("Failed to create texture image.");
+        return;
+    }
+
+    if(!vulkan_image_create_view(context, image_format, VK_IMAGE_ASPECT_COLOR_BIT, &map->image))
+    {
+        LOG_ERROR("Failed to create texture image views.");
+        return;
+    }
+
+    buffer_t staging = { .type = BUFFER_TYPE_STAGING, .size = image_size };
+    if(!vulkan_buffer_acquire_resources(&staging))
+    {
+        LOG_ERROR("Failed to create staging buffer.");
+        return;
+    }
+
+    VkCommandBuffer cmdbuf;
+    vulkan_command_buffer_begin_single_use(&context->graphics_command_manager, &cmdbuf);
+
+    // 2. Загузка данных в промежуточный буфер.
+    vulkan_buffer_load_range(&staging, 0, image_size, data);
+
+    // 3. Копирование данных из промежуточного буфера.
+    vulkan_image_transition_layout(cmdbuf, VULKAN_IMAGE_TRANSITION_UNDEFINED_TO_TRANSFER_DST, &map->image.handle);
+    vulkan_image_copy_from_buffer(cmdbuf, &map->image, ((vulkan_buffer_t*)staging.internal_data)->handle);
+    vulkan_image_transition_layout(cmdbuf, VULKAN_IMAGE_TRANSITION_TRANSFER_DST_TO_SHADER_READ, &map->image.handle);
+
+    vulkan_command_buffer_end_single_use(&context->graphics_command_manager, cmdbuf);
+    vulkan_buffer_release_resources(&staging);
+
+    // TODO: Сделать полностью настраиваемой.
+    VkSamplerCreateInfo sampler_info = {
+        .sType                   = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter               = VK_FILTER_LINEAR,                      // TODO: Заменить
+        .minFilter               = VK_FILTER_LINEAR,                      // TODO: Заменить
+        .addressModeU            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, // TODO: Заменить
+        .addressModeV            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, // TODO: Заменить
+        .addressModeW            = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, // TODO: Заменить
+        .anisotropyEnable        = VK_TRUE,                               // TODO: Должно быть в соответсвии с настроками устройства.
+        .maxAnisotropy           = 16,
+        .borderColor             = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+        .compareEnable           = VK_FALSE,
+        .compareOp               = VK_COMPARE_OP_ALWAYS,
+        .mipmapMode              = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .mipLodBias              = 0.0f,
+        .minLod                  = 0.0f,
+        .maxLod                  = 0.0f,
+    };
+
+    VkResult result = vkCreateSampler(context->device.logical, &sampler_info, context->allocator, &map->sampler);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to create sampler: %s.", vulkan_result_get_string(result));
+        return;
+    }
+
+    t->generation++;
+}
+
+void vulkan_texture_release_resources(texture_t* t)
+{
+    vulkan_texture_map_t* map = t->internal_data;
+    vkDestroySampler(context->device.logical, map->sampler, context->allocator);
+    vulkan_image_destroy(context, &map->image);
+    t->internal_data = nullptr;
 }

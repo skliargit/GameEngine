@@ -64,7 +64,6 @@ static bool on_event(platform_window_event_context_t* event)
             u32 width = event->window_resize.to_width;
             u32 height = event->window_resize.to_height;
             context->on_resize(width, height);
-            renderer_on_resize(width, height);
         } break;
 
         case PLATFORM_WINDOW_EVENT_KEYBOARD_KEY: {
@@ -386,7 +385,7 @@ void application_terminate()
         }
 
         // Завершение системы рендерера.
-        if(renderer_system_is_initialized())
+        if(renderer_is_initialized())
         {
             renderer_shutdown();
             LOG_INFO("Renderer shutdown complete.");

@@ -19,21 +19,76 @@ static u32 width_cached;
 static u32 height_cached;
 static bool cursor_locked;
 
+static shader_t world_shader;
+static renderer_camera_t world_camera;
+static renderer_model_t plane_model;
+static buffer_t vertex_buffer;
+static buffer_t index_buffer;
+
+// TODO: Временно.
+static shader_stage_file_t shader_stage_files[] = {
+    { "../assets/shaders/WorldShader.vert.spv", SHADER_STAGE_VERTEX   },
+    { "../assets/shaders/WorldShader.frag.spv", SHADER_STAGE_FRAGMENT }
+};
+
 static bool game_initialize(const application_config* config)
 {
     UNUSED(config);
 
-    // TODO: Временно! Начальная инициализация камеры.
+    if(!renderer_shader_create(ARRAY_SIZE(shader_stage_files), shader_stage_files, &world_shader))
+    {
+        LOG_ERROR("Failed to load world shader.");
+        return false;
+    }
+    LOG_TRACE("World shader created successfully.");
+
+    if(!renderer_buffer_create(BUFFER_TYPE_VERTEX, sizeof(vertex3d) * 1000, &vertex_buffer))
+    {
+        LOG_ERROR("Failed to create vertex buffer.");
+        return false;
+    }
+
+    if(!renderer_buffer_create(BUFFER_TYPE_INDEX, sizeof(u32) * 1000, &index_buffer))
+    {
+        LOG_ERROR("Failed to create index buffer.");
+        return false;
+    }
+    LOG_TRACE("Vertex/index buffers created successfully.");
+
+    u32 indices[] = {0, 1, 2, 0, 3, 1};
+    vertex3d verts[] = {
+        { {{ -0.5, -0.5, 0.0 }}, {{ 1.0, 0.0, 0.0, 1.0 }} }, // 0
+        { {{  0.5,  0.5, 0.0 }}, {{ 0.0, 1.0, 0.0, 1.0 }} }, // 1
+        { {{ -0.5,  0.5, 0.0 }}, {{ 0.0, 0.0, 1.0, 1.0 }} }, // 2
+        { {{  0.5, -0.5, 0.0 }}, {{ 1.0, 1.0, 0.0, 1.0 }} }, // 3
+    };
+
+    if(!renderer_buffer_load_range(&vertex_buffer, 0, sizeof(verts), verts))
+    {
+        LOG_ERROR("Failed to load verts data.");
+        return false;
+    }
+
+    if(!renderer_buffer_load_range(&index_buffer, 0, sizeof(indices), indices))
+    {
+        LOG_ERROR("Failed to load indices data.");
+        return false;
+    }
+    LOG_TRACE("Test geometry loaded successfully.");
+
+    // Перспектива.
     const f32 aspect = (f32)config->window.width / config->window.height;
     const f32 fov_rad = math_deg_to_rad(60);
     proj = mat4_perspective(fov_rad, aspect, 0.1f, 1000.0f);
-    cam = camera_init(vec3_backward());
 
+    // Какмера.
+    cam  = camera_init(vec3_backward());
     view = camera_get_view(&cam);
-    renderer_update_camera(&proj, &view);
+    world_camera.proj = proj;
+    world_camera.view = view;
 
-    mat4 model = mat4_identity();
-    renderer_update_model(&model);
+    // Модель.
+    plane_model.transform = mat4_identity();
 
     width_cached = config->window.width;
     height_cached = config->window.height;
@@ -46,17 +101,23 @@ static bool game_initialize(const application_config* config)
 
 static void game_shutdown()
 {
+    renderer_wait_idle_device();
+
+    renderer_buffer_destroy(&vertex_buffer);
+    renderer_buffer_destroy(&index_buffer);
+    LOG_TRACE("Vertex/index buffers destroy complete.");
+
+    renderer_shader_destroy(&world_shader);
+    LOG_TRACE("World shader destroy complete.");
 }
 
 static void game_on_resize(u32 width, u32 height)
 {
-    UNUSED(width);
-    UNUSED(height);
+    renderer_frame_resize(width, height);
 
     // TODO: Временно для камеры!
     const f32 aspect = (f32)width / height;
     mat4_perspective_update_aspect(&proj, aspect);
-    renderer_update_camera(&proj, &view);
 
     width_cached = width;
     height_cached = height;
@@ -130,7 +191,6 @@ static bool game_update(f32 delta_time)
         if(cam.wait_update_view)
         {
             view = camera_get_view(&cam);
-            renderer_update_camera(&proj, &view);
         }
     }
 
@@ -239,6 +299,21 @@ static bool game_update(f32 delta_time)
 static bool game_render(f32 delta_time)
 {
     UNUSED(delta_time);
+
+    renderer_frame_bind_shader(&world_shader);
+
+    world_camera.proj = proj;
+    world_camera.view = view;
+    renderer_shader_update_camera(&world_shader, &world_camera);
+
+    renderer_shader_update_model(&world_shader, &plane_model);
+
+    renderer_frame_bind_buffer(&vertex_buffer, 0);
+    renderer_frame_bind_buffer(&index_buffer, 0);
+
+    // renderer_frame_draw(6);
+    renderer_frame_draw_indexed(6);
+
     return true;
 }
 

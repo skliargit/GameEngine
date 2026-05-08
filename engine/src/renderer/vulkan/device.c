@@ -1,5 +1,6 @@
 #include "renderer/vulkan/device.h"
 #include "renderer/vulkan/window.h"
+#include "renderer/vulkan/command.h"
 #include "renderer/vulkan/result.h"
 
 #include "debug/assert.h"
@@ -300,14 +301,13 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
     VkDeviceCreateInfo device_info = {
         .sType                      = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext                      = &features,
-        .pEnabledFeatures           = nullptr,                // NOTE: Смотри pNext.
+        .pEnabledFeatures           = nullptr,                  // Смотри поле pNext.
         .queueCreateInfoCount       = family_count,
         .pQueueCreateInfos          = family_info,
         .enabledExtensionCount      = config->extension_count,
         .ppEnabledExtensionNames    = config->extensions,
-        // NOTE: Устарело и больше не используется!
-        .enabledLayerCount          = 0,
-        .ppEnabledLayerNames        = nullptr,
+        .enabledLayerCount          = 0,                        // NOTE: Устарело и больше не используется!
+        .ppEnabledLayerNames        = nullptr,                  // ...
     };
 
     VkResult result = vkCreateDevice(physical->handle, &device_info, context->allocator, &out_device->logical);
@@ -340,96 +340,28 @@ bool vulkan_device_create(vulkan_context* context, vulkan_physical_device* physi
         "Graphics queue handle and present queue handle must be equal!"
     );
 
-    // TODO: Изменить алгоритм создания пулов и стратегии их использования!
-
-    // Получение пула команд очереди графики.
-    VkCommandPoolCreateInfo graphics_command_pool_info = {
-        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT, // т.к. используется для кадров, а они не являются временным явлением.
-        .queueFamilyIndex = graphics_family_index,
-    };
-
-    result = vkCreateCommandPool(out_device->logical, &graphics_command_pool_info, context->allocator, &out_device->graphics_queue.command_pool);
-    if(!vulkan_result_is_success(result))
+    if(!vulkan_command_manager_create(context, out_device->graphics_queue.handle, out_device->graphics_queue.family_index, &context->graphics_command_manager))
     {
-        LOG_ERROR("Failed to create graphics command pool: %s.", vulkan_result_get_string(result));
+        LOG_ERROR("Failed to create graphics command manager.");
         return false;
     }
-    LOG_TRACE("Graphics command pool created successfully.");
+    LOG_TRACE("Graphics command manager created successfully.");
 
-    // Получение пула команд очереди показа.
+    // Проверка поддержки операций показа менеджерером графики.
     if(graphics_family_index != present_family_index)
     {
-        VkCommandPoolCreateInfo present_command_pool_info = {
-            .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-            .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .queueFamilyIndex = present_family_index,
-        };
-
-        result = vkCreateCommandPool(out_device->logical, &present_command_pool_info, context->allocator, &out_device->present_queue.command_pool);
-        if(!vulkan_result_get_string(result))
-        {
-            LOG_ERROR("Failed to create present command pool: %s.", vulkan_result_get_string(result));
-            return false;
-        }
-        LOG_TRACE("Present command pool created successfully.");
-    }
-    else
-    {
-        out_device->present_queue.command_pool = out_device->graphics_queue.command_pool;
-        LOG_TRACE("Present command pool shared with graphics.");
-    }
-
-    // Получение вычислительного пула команд.
-    VkCommandPoolCreateInfo compute_command_pool_info = {
-        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = compute_family_index,
-    };
-
-    result = vkCreateCommandPool(out_device->logical, &compute_command_pool_info, context->allocator, &out_device->compute_queue.command_pool);
-    if(!vulkan_result_is_success(result))
-    {
-        LOG_ERROR("Failed to create compute command pool: %s.", vulkan_result_get_string(result));
+        LOG_ERROR("Presentation сommand manager is not yet supported.");
         return false;
     }
-    LOG_TRACE("Compute command pool created successfully.");
-
-    // Получение пула команд для передачи данных.
-    VkCommandPoolCreateInfo transfer_command_pool_info = {
-        .sType            = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .flags            = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-        .queueFamilyIndex = transfer_family_index,
-    };
-
-    result = vkCreateCommandPool(out_device->logical, &transfer_command_pool_info, context->allocator, &out_device->transfer_queue.command_pool);
-    if(!vulkan_result_is_success(result))
-    {
-        LOG_ERROR("Failed to create transfer command pool: %s.", vulkan_result_get_string(result));
-        return false;
-    }
-    LOG_TRACE("Transfer command pool created successfully.");
+    LOG_TRACE("Presentation commands use the graphics command manager.");
 
     return true;
 }
 
 void vulkan_device_destroy(vulkan_context* context, vulkan_device* device)
 {
-    // Освобождение пулов команд.
-    vkDestroyCommandPool(context->device.logical, device->graphics_queue.command_pool, context->allocator);
-    LOG_TRACE("Graphics command pool destroy complete.");
-
-    if(device->graphics_queue.family_index != device->present_queue.family_index)
-    {
-        vkDestroyCommandPool(context->device.logical, device->present_queue.command_pool, context->allocator);
-        LOG_TRACE("Present command pool destroy complete.");
-    }
-
-    vkDestroyCommandPool(context->device.logical, device->compute_queue.command_pool, context->allocator);
-    LOG_TRACE("Compute command pool destroy complete.");
-
-    vkDestroyCommandPool(context->device.logical, device->transfer_queue.command_pool, context->allocator);
-    LOG_TRACE("Transfer command pool destroy complete.");
+    vulkan_command_manager_destroy(context, &context->graphics_command_manager);
+    LOG_TRACE("Graphics command manager destroy complete.");
 
     vkDestroyDevice(device->logical, context->allocator);
     LOG_TRACE("Logical device destroy complete.");
