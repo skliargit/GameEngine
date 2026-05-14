@@ -24,17 +24,22 @@ typedef struct renderer_system_context {
     void (*frame_draw)(const u32 vertex_count);
     void (*frame_draw_indexed)(const u32 index_count);
 
-    bool (*buffer_acquire_resources)(buffer_t* buffer);
-    void (*buffer_release_resources)(buffer_t* buffer);
+    bool (*buffer_create)(buffer_t* buffer);
+    void (*buffer_destroy)(buffer_t* buffer);
     bool (*buffer_resize)(buffer_t* buffer, usize new_size);
     bool (*buffer_map_memory)(buffer_t* buffer, usize offset, usize size, void** data); 
     void (*buffer_unmap_memory)(buffer_t* buffer);
     bool (*buffer_load_range)(buffer_t* buffer, usize offset, usize size, const void* data);
     void (*buffer_copy_range)(buffer_t* src, usize src_offset, buffer_t* dst, usize dst_offset, usize size);
 
-    bool (*shader_acquire_resources)(shader_t* shader, u32 stage_count, shader_stage_file_t* stage_files);
-    void (*shader_release_resources)(shader_t* shader);
-    void (*shader_update_camera)(shader_t* shader, renderer_camera_t* camera);
+    bool (*shader_create)(shader_t* shader, u32 stage_count, shader_stage_file_t* stage_files);
+    void (*shader_destroy)(shader_t* shader);
+    bool (*shader_acquire_resource)(shader_t* shader, u32 set_index, u32* out_resource_id);
+    void (*shader_release_resource)(shader_t* shader, u32 resource_id);
+    void (*shader_update_resource_binding)(shader_t* shader, u32 resource_id, u32 binding_index, const void* data);
+    void (*shader_apply_resource)(shader_t* shader, u32 resource_id);
+
+    // TODO: Временно, убрать!
     void (*shader_update_model)(shader_t* shader, renderer_model_t* model);
 } renderer_system_context;
 
@@ -71,30 +76,34 @@ bool renderer_initialize(renderer_config* config)
     switch(config->backend_type)
     {
         case RENDERER_BACKEND_TYPE_VULKAN:
-            context->backend_initialize       = vulkan_backend_initialize;
-            context->backend_shutdown         = vulkan_backend_shutdown;
+            context->backend_initialize             = vulkan_backend_initialize;
+            context->backend_shutdown               = vulkan_backend_shutdown;
 
-            context->backend_wait_idle_device = vulkan_wait_idle_device;
+            context->backend_wait_idle_device       = vulkan_wait_idle_device;
 
-            context->frame_resize             = vulkan_frame_resize;
-            context->frame_begin              = vulkan_frame_begin;
-            context->frame_end                = vulkan_frame_end;
-            context->frame_bind_shader        = vulkan_frame_bind_shader;
-            context->frame_bind_buffer        = vulkan_frame_bind_buffer;
-            context->frame_draw               = vulkan_frame_draw;
-            context->frame_draw_indexed       = vulkan_frame_draw_indexed;
+            context->frame_resize                   = vulkan_frame_resize;
+            context->frame_begin                    = vulkan_frame_begin;
+            context->frame_end                      = vulkan_frame_end;
+            context->frame_bind_shader              = vulkan_frame_bind_shader;
+            context->frame_bind_buffer              = vulkan_frame_bind_buffer;
+            context->frame_draw                     = vulkan_frame_draw;
+            context->frame_draw_indexed             = vulkan_frame_draw_indexed;
 
-            context->buffer_acquire_resources = vulkan_buffer_acquire_resources;
-            context->buffer_release_resources = vulkan_buffer_release_resources;
-            context->buffer_resize            = vulkan_buffer_resize;
-            context->buffer_map_memory        = vulkan_buffer_map_memory;
-            context->buffer_unmap_memory      = vulkan_buffer_unmap_memory;
-            context->buffer_load_range        = vulkan_buffer_load_range;
-            context->buffer_copy_range        = vulkan_buffer_copy_range;
+            context->buffer_create                  = vulkan_buffer_create;
+            context->buffer_destroy                 = vulkan_buffer_destroy;
+            context->buffer_resize                  = vulkan_buffer_resize;
+            context->buffer_map_memory              = vulkan_buffer_map_memory;
+            context->buffer_unmap_memory            = vulkan_buffer_unmap_memory;
+            context->buffer_load_range              = vulkan_buffer_load_range;
+            context->buffer_copy_range              = vulkan_buffer_copy_range;
 
-            context->shader_acquire_resources = vulkan_shader_acquire_resources;
-            context->shader_release_resources = vulkan_shader_release_resources;
-            context->shader_update_camera     = vulkan_shader_update_camera;
+            context->shader_create                  = vulkan_shader_create;
+            context->shader_destroy                 = vulkan_shader_destroy;
+            context->shader_acquire_resource        = vulkan_shader_acquire_resource;
+            context->shader_release_resource        = vulkan_shader_release_resource;
+            context->shader_update_resource_binding = vulkan_shader_update_resource_binding;
+            context->shader_apply_resource          = vulkan_shader_apply_resource;
+
             context->shader_update_model      = vulkan_shader_update_model;
             break;
         case RENDERER_BACKEND_TYPE_OPENGL:
@@ -191,14 +200,14 @@ bool renderer_buffer_create(buffer_type_t type, usize size, buffer_t* out_buffer
 
     out_buffer->type = type;
     out_buffer->size = size;
-    return context->buffer_acquire_resources(out_buffer);
+    return context->buffer_create(out_buffer);
 }
 
 void renderer_buffer_destroy(buffer_t* buffer)
 {
     ASSERT(context != nullptr, "Renderer system should be initialized.");
 
-    context->buffer_release_resources(buffer);
+    context->buffer_destroy(buffer);
     mzero(buffer, sizeof(buffer_t));
 }
 
@@ -253,37 +262,43 @@ void renderer_buffer_copy_range(buffer_t* src, usize src_offset, buffer_t* dst, 
 CORE_API bool renderer_shader_create(u32 stage_count, shader_stage_file_t* stage_files, shader_t* out_shader)
 {
     ASSERT(context != nullptr, "Renderer system should be initialized.");
-    ASSERT(stage_count <= SHADER_MAX_STAGES, "Shader stage count must be less than or equal to SHADER_MAX_STAGES.");
 
-    if(!context->shader_acquire_resources(out_shader, stage_count, stage_files))
-    {
-        LOG_ERROR("Failed to acquire shader resources.");
-        return false;
-    }
-
-    // TODO: Проверить и установить размер minUniformBufferOffsetAlignment.
-    if(!renderer_buffer_create(BUFFER_TYPE_UNIFORM, 3 * sizeof(renderer_camera_t), &out_shader->uniform_buffer))
-    {
-        LOG_ERROR("Failed to create uniform buffer.");
-        return false;
-    }
-
-    return true;
+    return context->shader_create(out_shader, stage_count, stage_files);
 }
 
 void renderer_shader_destroy(shader_t* shader)
 {
     ASSERT(context != nullptr, "Renderer system should be initialized.");
 
-    renderer_buffer_destroy(&shader->uniform_buffer);
-    context->shader_release_resources(shader);
+    context->shader_destroy(shader);
 }
 
-void renderer_shader_update_camera(shader_t* shader, renderer_camera_t* camera)
+bool renderer_shader_acquire_resource(shader_t* shader, u32 set_index, u32* out_resource_id)
 {
     ASSERT(context != nullptr, "Renderer system should be initialized.");
 
-    context->shader_update_camera(shader, camera);    
+    return context->shader_acquire_resource(shader, set_index, out_resource_id);
+}
+
+void renderer_shader_release_resource(shader_t* shader, u32 resource_id)
+{
+    ASSERT(context != nullptr, "Renderer system should be initialized.");
+
+    context->shader_release_resource(shader, resource_id);
+}
+
+void renderer_shader_update_resource_binding(shader_t* shader, u32 resource_id, u32 binding_index, const void* data)
+{
+    ASSERT(context != nullptr, "Renderer system should be initialized.");
+
+    context->shader_update_resource_binding(shader, resource_id, binding_index, data);
+}
+
+void renderer_shader_apply_resource(shader_t* shader, u32 resource_id)
+{
+    ASSERT(context != nullptr, "Renderer system should be initialized.");
+
+    context->shader_apply_resource(shader, resource_id);
 }
 
 void renderer_shader_update_model(shader_t* shader, renderer_model_t* model)

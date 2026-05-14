@@ -163,15 +163,49 @@ typedef struct vulkan_device {
 } vulkan_device;
 
 /**
+    @brief Состояние привязки ресурса.
+*/
+typedef struct vulkan_shader_resource_binding {
+    u32 generation;                                                              /**< Текущая версия изменений ресурса.                */
+    u32 generations[RENDERER_MAX_FRAME_IN_FLIGHT];                               /**< Последняя версия изменений ресурса по кадрам.    */
+    usize uniform_buffer_offset;                                                 /**< Смещение данные от начала универсального буфера. */
+} vulkan_shader_resource_binding_t;
+
+/**
+    @brief Состояние ресурса.
+*/
+typedef struct vulkan_shader_resource {
+    u32 id;                                                                      /**< Идентификатор ресурса.                             */
+    u32 set_index;                                                               /**< Индекс сета к которому может быть привязан ресурс. */
+    VkDescriptorSet descriptor_sets[RENDERER_MAX_FRAME_IN_FLIGHT];               /**< Дескрипторные сеты (по одному на кадр).            */
+    u32 binding_count;                                                           /**< Используемое количество привязок сета.             */
+    vulkan_shader_resource_binding_t bindings[RENDERER_MAX_SHADER_SET_BINDINGS]; /**< Массив привязок сета (uniform и т.д.).             */
+} vulkan_shader_resource_t;
+
+/**
+    @brief Конфигурация дескрипторного набора.
+*/
+typedef struct vulkan_shader_set_config {
+    u32 binding_count;                                                           /**< Количество привязок сета.                    */
+    u32 binding_sizes[RENDERER_MAX_SHADER_SET_BINDINGS];                         /**< Размер данных данных в универсальном буфере. */ // TODO: временно.
+    VkDescriptorSetLayoutBinding bindings[RENDERER_MAX_SHADER_SET_BINDINGS];     /**< Массив конфигураций привязок сета.           */
+} vulkan_shader_set_config_t;
+
+/**
     @brief Представляет шейдер.
 */
 typedef struct vulkan_shader {
-    VkPipelineLayout pipeline_layout;               /**< Макет конвейера (размещение дескрипторных наборов и push-констант).    */
-    VkDescriptorSetLayout descriptor_set_layout;    /**< Макет дескрипторных наборов.                                           */
-    VkPipeline pipeline;                            /**< Указатель на графический конвейер (скомпилированные шейдерные модули). */
-    VkDescriptorPool descriptor_pool;               /**< Пул дескрипторов.                                                      */
-    VkDescriptorSet descriptor_sets[3];             /**< Массив дескрипторных наборов (на кадр).                                */
-    bool descriptor_set_updated[3];                 /**< Флаги обновления дескрипторных наборов (на дескриптор, на кадр).       */
+    u32 set_count;                                                               /**< Количество дескрипторных наборов в шейдере. */
+    vulkan_shader_set_config_t set_configs[RENDERER_MAX_SHADER_SETS];            /**< Массив конфигураций дискрипторных наборов.  */
+    VkDescriptorSetLayout set_layouts[RENDERER_MAX_SHADER_SETS];                 /**< Массив макетов дескрипторных наборов.       */
+    VkPipelineLayout pipeline_layout;                                            /**< Указатель на макет конвейера.               */
+    VkPipeline pipeline;                                                         /**< Указатель на графический конвейер.          */
+    VkDescriptorPool descriptor_pool;                                            /**< Пул дескрипторов.                           */
+    buffer_t uniform_buffer;                                                     /**< Uniform буфер данных.                       */
+    void* uniform_buffer_mapped_data;                                            /**< Указатель на память буфера.                 */
+    usize uniform_buffer_next_offset;                                            /**< Индекс следующего смещения.                 */ // TODO: временно.
+    u32 resource_count;                                                          /**< Количество используемых ресурсов.           */
+    vulkan_shader_resource_t resources[RENDERER_MAX_SHADER_RESOURCES];           /**< Массив ресурсов.                            */
 } vulkan_shader_t;
 
 // @brief Основной контекст рендерера.
@@ -209,10 +243,12 @@ typedef struct vulkan_context {
     // @brief Цепочка обмена для управления буферами представления.
     vulkan_swapchain swapchain;
 
+    // TODO: Сделать в виде массивов.
     // @brief Массив объектов синхронизации указывающих на готовность выполнения операций с изображением (на кард).
     VkSemaphore* image_available_semaphores;
     // @brief Массив объектов синхронизации указывающих на готовность записи командного буфера (на кадр).
     VkFence* in_flight_fences;
+
     // @brief Массив объектов синхронизации указывающих на готовность представления изображения на экран (на изображение).
     VkSemaphore* image_complete_semaphores;
     // @brief Массив указателей на объекты синхронизации ... (на изображение).

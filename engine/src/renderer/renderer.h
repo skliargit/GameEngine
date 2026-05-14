@@ -27,5 +27,10 @@ CORE_API void renderer_buffer_copy_range(buffer_t* src, usize src_offset, buffer
 
 CORE_API bool renderer_shader_create(u32 stage_count, shader_stage_file_t* stage_files, shader_t* out_shader);
 CORE_API void renderer_shader_destroy(shader_t* shader);
-CORE_API void renderer_shader_update_camera(shader_t* shader, renderer_camera_t* camera);
+CORE_API bool renderer_shader_acquire_resource(shader_t* shader, u32 set_index, u32* out_resource_id);
+CORE_API void renderer_shader_release_resource(shader_t* shader, u32 resource_id);
+CORE_API void renderer_shader_update_resource_binding(shader_t* shader, u32 resource_id, u32 binding_index, const void* data);
+CORE_API void renderer_shader_apply_resource(shader_t* shader, u32 resource_id);
+
+// TODO: Временно, убрать!
 CORE_API void renderer_shader_update_model(shader_t* shader, renderer_model_t* model);

@@ -1035,7 +1035,7 @@ static void buffer_copy_range(vulkan_buffer_t* src, usize src_offset, vulkan_buf
     // );
 }
 
-bool vulkan_buffer_acquire_resources(buffer_t* buffer)
+bool vulkan_buffer_create(buffer_t* buffer)
 {
     buffer->internal_data = mallocate(sizeof(vulkan_buffer_t), MEMORY_TAG_RENDERER);
     vulkan_buffer_t* vk_buffer = buffer->internal_data;
@@ -1117,7 +1117,7 @@ bool vulkan_buffer_acquire_resources(buffer_t* buffer)
     return true;
 }
 
-void vulkan_buffer_release_resources(buffer_t* buffer)
+void vulkan_buffer_destroy(buffer_t* buffer)
 {
     vulkan_buffer_t* vk_buffer = buffer->internal_data;
 
@@ -1229,7 +1229,7 @@ bool vulkan_buffer_load_range(buffer_t* buffer, usize offset, usize size, const 
     {
         // Создание промежуточного буфера для загрузки в видеопамять.
         buffer_t staging = { .type = BUFFER_TYPE_STAGING, .size = size };
-        if(!vulkan_buffer_acquire_resources(&staging))
+        if(!vulkan_buffer_create(&staging))
         {
             LOG_ERROR("Failed to create staging buffer.");
             return false;
@@ -1242,7 +1242,7 @@ bool vulkan_buffer_load_range(buffer_t* buffer, usize offset, usize size, const 
         //       вот фигня, при текущей логике пока запись буфера идет, мы уничтожаем временный буфер
         //       с данными и поэтому vkCmdCopyBuffer просто нет доступа к staging!!!
         // TODO: Пересмотреть логику работы функции!
-        vulkan_buffer_release_resources(&staging);
+        vulkan_buffer_destroy(&staging);
     }
     // Копирование без промежуточного буфера.
     else
@@ -1332,6 +1332,7 @@ static bool shader_create_modules(u32 stage_count, shader_stage_file_t* stage_fi
         out_stages[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
         out_stages[i].pName = "main"; // TODO: Сделать настраиваемой.
 
+        // TODO: stage_files[i].stage & 1<<i и убрать stage_count, но ограничить SHADER_MAX_STAGES!
         switch(stage_files[i].stage)
         {
             case SHADER_STAGE_VERTEX:
@@ -1362,16 +1363,17 @@ static void shader_destroy_modules(u32 stage_count, VkPipelineShaderStageCreateI
     mzero(stages, sizeof(VkPipelineShaderStageCreateInfo) * stage_count);
 }
 
-bool vulkan_shader_acquire_resources(shader_t* shader, u32 stage_count, shader_stage_file_t* stage_files)
+bool vulkan_shader_create(shader_t* shader, u32 stage_count, shader_stage_file_t* stage_files)
 {
     shader->internal_data = mallocate(sizeof(vulkan_shader_t), MEMORY_TAG_RENDERER);
     vulkan_shader_t* vk_shader = shader->internal_data;
+    mzero(vk_shader, sizeof(vulkan_shader_t));
 
-    // Создание программируемых стадий конфейера.
-    VkPipelineShaderStageCreateInfo stages[SHADER_MAX_STAGES];
+    // Создание шейдерных модулей.
+    VkPipelineShaderStageCreateInfo stages[RENDERER_MAX_SHADER_STAGES];
     if(!shader_create_modules(stage_count, stage_files, stages))
     {
-        LOG_ERROR("Failed to create shader stages.");
+        LOG_ERROR("Failed to create shader modules.");
         return false;
     }
 
@@ -1413,34 +1415,49 @@ bool vulkan_shader_acquire_resources(shader_t* shader, u32 stage_count, shader_s
         .pVertexAttributeDescriptions    = attribute_descriptions,
     };
 
-    // Наборы дескрипторов конвейера.
+    // TODO: Временно! Организовать рефлексию биндингов из spv файлов или шейдерных модулей.
     // TODO: Получить и проверить maxBoundDescriptorSets в VkPhysicalDeviceLimits через vkGetPhysicalDeviceProperties()!
-    // TODO: Настраиваемые размещения (привязки).
-    VkDescriptorSetLayoutBinding descriptor_set_bindings[] = {
-        // Uniform буфер для вершиного шейдера.
-        {
-            .binding            = 0,                                 // Индекс размещения (привязки) данных для uniform переменной.
-            .descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // Тип связываемого дескриптора - uniform переменная.
-            .descriptorCount    = 1,                                 // Кол-во связываемых дескрипторов с шейдером (например, передача массива в шейдер).
-            .stageFlags         = VK_SHADER_STAGE_VERTEX_BIT,        // Стадия в которую передаются uniform переменные.
-            .pImmutableSamplers = nullptr
-        }
-        // TODO: Другие размещения (привязки) данных: сэмплеры для фрагментного шейдера.
+    vk_shader->set_count = 1;
+
+    // Глобальный набор дескрипторов конвейера (камера).
+    vk_shader->set_configs[0].binding_count = 1;
+    vk_shader->set_configs[0].binding_sizes[0] = sizeof(renderer_camera_t);
+    vk_shader->set_configs[0].bindings[0] = (VkDescriptorSetLayoutBinding){
+        .binding            = 0,                                 // Индекс размещения (привязки) данных для uniform переменной.
+        .descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, // Тип связываемого дескриптора - uniform переменная.
+        .descriptorCount    = 1,                                 // Кол-во связываемых дескрипторов с шейдером (например, передача массива в шейдер). // TODO: Учесть при выделении памяти, получении ресурсов, освобождении, обновлении и привязке.
+        .stageFlags         = VK_SHADER_STAGE_VERTEX_BIT,        // Стадия в которую передаются uniform переменные.
+        .pImmutableSamplers = nullptr
     };
 
-    VkDescriptorSetLayoutCreateInfo descriptor_set_layout_info = {
-        .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .pNext        = nullptr,
-        .flags        = 0,
-        .bindingCount = ARRAY_SIZE(descriptor_set_bindings),         // Кол-во размещений (привязок).
-        .pBindings    = descriptor_set_bindings
-    };
+    // TODO: Локальный набор дескрипторов конвейера (объект).
+    // vk_shader->set_configs[1].binding_count = 1;
+    // vk_shader->set_configs[1].binding_sizes[0] = sizeof(renderer_object_t);
+    // vk_shader->set_configs[1].bindings[0] = (VkDescriptorSetLayoutBinding){
+    //     .binding            = 0,
+    //     .descriptorType     = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    //     .descriptorCount    = 1,
+    //     .stageFlags         = VK_SHADER_STAGE_FRAGMENT_BIT,
+    //     .pImmutableSamplers = nullptr
+    // };
 
-    VkResult result = vkCreateDescriptorSetLayout(context->device.logical, &descriptor_set_layout_info, context->allocator, &vk_shader->descriptor_set_layout);
-    if(!vulkan_result_is_success(result))
+    // Создание макетов дескрипторных наборов.
+    for(u32 i = 0; i < vk_shader->set_count; ++i)
     {
-        LOG_ERROR("Failed to create descriptor set layouts: %s.", vulkan_result_get_string(result));
-        return false;
+        vulkan_shader_set_config_t* set_config = &vk_shader->set_configs[i];
+
+        VkDescriptorSetLayoutCreateInfo set_layout_info = {
+            .sType        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .bindingCount = set_config->binding_count,
+            .pBindings    = set_config->bindings
+        };
+
+        VkResult result = vkCreateDescriptorSetLayout(context->device.logical, &set_layout_info, context->allocator, &vk_shader->set_layouts[i]);
+        if(!vulkan_result_is_success(result))
+        {
+            LOG_ERROR("Failed to create descriptor set layout %u: %s.", i, vulkan_result_get_string(result));
+            return false;
+        }
     }
 
     // Push константы конвейера.
@@ -1453,16 +1470,16 @@ bool vulkan_shader_acquire_resources(shader_t* shader, u32 stage_count, shader_s
         }
     };
 
-    // Макет конвейера, описывающий размещение (привязки) дескрипторных наборов и push-констант.
+    // Макет конвейера, описывающий размещение дескрипторных наборов и push-констант.
     VkPipelineLayoutCreateInfo pipeline_layout_info = {
         .sType                  = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount         = 1,                                  // TODO: Настраиваемый.
-        .pSetLayouts            = &vk_shader->descriptor_set_layout,  // TODO: Настраиваемый.
+        .setLayoutCount         = vk_shader->set_count,
+        .pSetLayouts            = vk_shader->set_layouts,
         .pushConstantRangeCount = ARRAY_SIZE(push_constants),         // TODO: Настраиваемый.
         .pPushConstantRanges    = push_constants                      // TODO: Настраиваемый.
     };
 
-    result = vkCreatePipelineLayout(context->device.logical, &pipeline_layout_info, context->allocator, &vk_shader->pipeline_layout);
+    VkResult result = vkCreatePipelineLayout(context->device.logical, &pipeline_layout_info, context->allocator, &vk_shader->pipeline_layout);
     if(!vulkan_result_is_success(result))
     {
         LOG_ERROR("Failed to create graphics pipeline layout: %s.", vulkan_result_get_string(result));
@@ -1571,7 +1588,7 @@ bool vulkan_shader_acquire_resources(shader_t* shader, u32 stage_count, shader_s
     VkPipelineRenderingCreateInfo rendering_info = {
         .sType                   = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
         .viewMask                = 0,
-        .colorAttachmentCount    = 1,                                        // TODO: Должен соответствовать color_blend_attachment_count!!!
+        .colorAttachmentCount    = ARRAY_SIZE(color_blend_attachments),
         .pColorAttachmentFormats = &context->swapchain.image_format.format,  // TODO: Должен быть массив форматов для каждого attachment.
         .depthAttachmentFormat   = context->swapchain.depth_format,
         .stencilAttachmentFormat = VK_FORMAT_UNDEFINED
@@ -1624,61 +1641,85 @@ bool vulkan_shader_acquire_resources(shader_t* shader, u32 stage_count, shader_s
     //       т.к. байт-код компилируется в машинный код и становится частью конвейера.
     shader_destroy_modules(stage_count, stages);
 
-    // Пул дескрипторов.
-    VkDescriptorPoolSize descriptor_pool_sizes[] = {
+    // Подсчет дескрипторов по типам.
+    u32 uniform_buffer_count  = 0;
+    u32 uniform_buffer_size   = 0;
+
+    for(u32 s = 0; s < vk_shader->set_count; ++s)
+    {
+        vulkan_shader_set_config_t* set_config = &vk_shader->set_configs[s];
+        for(u32 b = 0; b < set_config->binding_count; ++b)
         {
-            .type            = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .descriptorCount = context->swapchain.max_frames_in_flight      // на кадр TODO: максимальный или max_frames_in_flight.
+            if(set_config->bindings[b].descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+            {                
+                u32 descriptor_count = set_config->bindings[b].descriptorCount;
+                u32 descriptor_size  = set_config->binding_sizes[b];
+
+                uniform_buffer_count += descriptor_count;
+                uniform_buffer_size += descriptor_size * descriptor_count;
+            }
+            // TODO: Добавить другие типы.
         }
+    }
+
+    // Поправка на количество кадров.
+    uniform_buffer_count *= context->swapchain.max_frames_in_flight;
+    uniform_buffer_size *= context->swapchain.max_frames_in_flight;
+
+    // Создание пула дескрипторов.
+    VkDescriptorPoolSize pool_sizes[] = {
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniform_buffer_count }
     };
 
-    VkDescriptorPoolCreateInfo descriptor_pool_info = {
+    VkDescriptorPoolCreateInfo pool_info = {
         .sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .pNext         = nullptr,
         .flags         = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT, // Указывает на возможность изменения набора дескрипторов.
-        .maxSets       = context->swapchain.max_frames_in_flight,           // Максамально возможное кол-во наборов дескрипторов TODO: максимальный или max_frames_in_flight.
-        .poolSizeCount = ARRAY_SIZE(descriptor_pool_sizes),                 // Кол-во описаний размеров пула.
-        .pPoolSizes    = descriptor_pool_sizes
+        .maxSets       = vk_shader->set_count * context->swapchain.max_frames_in_flight,
+        .poolSizeCount = ARRAY_SIZE(pool_sizes),
+        .pPoolSizes    = pool_sizes
     };
 
-    result = vkCreateDescriptorPool(context->device.logical, &descriptor_pool_info, context->allocator, &vk_shader->descriptor_pool);
+    result = vkCreateDescriptorPool(context->device.logical, &pool_info, context->allocator, &vk_shader->descriptor_pool);
     if(!vulkan_result_is_success(result))
     {
         LOG_ERROR("Failed to create descriptor pool: %s.", vulkan_result_get_string(result));
         return false;
     }
 
-    // Выделение дескрипторных наборов (по одному на кадр).
-    // Зарезервировано 3, т.к. кол-во кадров в обработке 2-3 (см. max_frames_in_flight).
-    VkDescriptorSetLayout descriptor_set_layouts[3] = {
-        vk_shader->descriptor_set_layout,
-        vk_shader->descriptor_set_layout,
-        vk_shader->descriptor_set_layout
-    };
-
-    VkDescriptorSetAllocateInfo descriptor_set_allocate_info = {
-        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .pNext              = nullptr,
-        .descriptorPool     = vk_shader->descriptor_pool,
-        .descriptorSetCount = context->swapchain.max_frames_in_flight,
-        .pSetLayouts        = descriptor_set_layouts
-    };
-
-    result = vkAllocateDescriptorSets(context->device.logical, &descriptor_set_allocate_info, vk_shader->descriptor_sets);
-    if(!vulkan_result_is_success(result))
+    // Создание uniform буфера для сетов.
+    // TODO: Проверить и установить размер minUniformBufferOffsetAlignment.
+    vk_shader->uniform_buffer = (buffer_t){ BUFFER_TYPE_UNIFORM, uniform_buffer_size, nullptr };
+    if(!vulkan_buffer_create(&vk_shader->uniform_buffer))
     {
-        LOG_ERROR("Failed to allocate descriptor sets: %s.", vulkan_result_get_string(result));
+        LOG_ERROR("Failed to create shader: Unable to create uniform buffer.");
         return false;
+    }
+
+    if(!vulkan_buffer_map_memory(&vk_shader->uniform_buffer, 0, VK_WHOLE_SIZE, &vk_shader->uniform_buffer_mapped_data))
+    {
+        LOG_ERROR("Failed to create shader: Unable to map uniform buffer memory.");
+        return false;
+    }
+
+    // Инициализация ресурсов.
+    for(u32 i = 0; i < RENDERER_MAX_SHADER_RESOURCES; ++i)
+    {
+        vk_shader->resources[i].id = INVALID_ID32;
     }
 
     return true;
 }
 
-void vulkan_shader_release_resources(shader_t* shader)
+void vulkan_shader_destroy(shader_t* shader)
 {
     vulkan_shader_t* vk_shader = shader->internal_data;
 
-    // NOTE: Уничтожение shader->descriptor_sets происходит при уничтожении shader->descriptor_sets.
+    // TODO: отсоединить память внутри функции по уничтожению буфера. 
+    vulkan_buffer_unmap_memory(&vk_shader->uniform_buffer);
+    vulkan_buffer_destroy(&vk_shader->uniform_buffer);
+
+    // NOTE: Уничтожение дескрипторных наборов происходит при уничтожении их пула автоматически.
+
     if(vk_shader->descriptor_pool != nullptr)
     {
         vkDestroyDescriptorPool(context->device.logical, vk_shader->descriptor_pool, context->allocator);
@@ -1694,52 +1735,217 @@ void vulkan_shader_release_resources(shader_t* shader)
         vkDestroyPipelineLayout(context->device.logical, vk_shader->pipeline_layout, context->allocator);
     }
 
-    if(vk_shader->descriptor_set_layout != nullptr)
+    for(u32 i = 0; i < ARRAY_SIZE(vk_shader->set_layouts); ++i)
     {
-        vkDestroyDescriptorSetLayout(context->device.logical, vk_shader->descriptor_set_layout, context->allocator);
+        if(vk_shader->set_layouts[i] != nullptr)
+        {
+            vkDestroyDescriptorSetLayout(context->device.logical, vk_shader->set_layouts[i], context->allocator);
+        }
     }
 
     mfree(vk_shader, sizeof(vulkan_shader_t), MEMORY_TAG_RENDERER);
 }
 
-void vulkan_shader_update_camera(shader_t* shader, renderer_camera_t* camera)
+// TODO: Проверить получение, освобождени, обновление и применение для биндингов с несколькими дексрипторами.
+//       в спешке не стал их временно учитывать.
+bool vulkan_shader_acquire_resource(shader_t* shader, u32 set_index, u32* out_resource_id)
 {
+    vulkan_shader_t* vk_shader = shader->internal_data;
+    *out_resource_id = INVALID_ID32;
+
+    if(set_index >= vk_shader->set_count)
+    {
+        LOG_ERROR("Failed to acquire shader resource for SET=%u: Set index is out of range [0; %u).", set_index, vk_shader->set_count);
+        return false;
+    }
+
+    // Поиск свободного слота.
+    u32 resource_id = INVALID_ID32;
+    for(u32 i = 0; i < RENDERER_MAX_SHADER_RESOURCES; ++i)
+    {
+        if(vk_shader->resources[i].id == INVALID_ID32)
+        {
+            resource_id = i;
+            break;
+        }
+    }
+
+    if(resource_id == INVALID_ID32)
+    {
+        LOG_ERROR("Failed to acquire shader resource for SET=%u: No free resource slots left.", set_index);
+        return false;
+    }
+
+    // Получение указателя на ресурс.
+    vulkan_shader_resource_t* resource = &vk_shader->resources[resource_id];
+    resource->id = resource_id;
+    resource->set_index = set_index;
+    resource->binding_count = vk_shader->set_configs[set_index].binding_count;
+
+    // Выделение памяти в uniform буфере.
+    for(u32 b = 0; b < resource->binding_count; ++b)
+    {
+        vulkan_shader_resource_binding_t* resource_binding = &resource->bindings[b];
+
+        // TODO: Организовать список свободных участков буфера.
+        // TODO: Выравнивание размера для правильного получения следующего смещения.
+        {
+            // NOTE: Поправка на количество кадров.
+            usize memory_requirements = vk_shader->set_configs[set_index].binding_sizes[b] * context->swapchain.max_frames_in_flight;
+
+            if(vk_shader->uniform_buffer.size < (vk_shader->uniform_buffer_next_offset + memory_requirements))
+            {
+                LOG_ERROR("Failed to acquire shader resource for SET=%u: Out of space in uniform buffer.", set_index);
+                LOG_DEBUG("SET=%u, required size %zu byte, but buffer size %zu byte.", set_index, memory_requirements, vk_shader->uniform_buffer.size);
+                return false;
+            }
+
+            resource_binding->uniform_buffer_offset = vk_shader->uniform_buffer_next_offset;
+            vk_shader->uniform_buffer_next_offset += memory_requirements;
+        }
+
+        mzero(resource_binding->generations, sizeof(u32) * RENDERER_MAX_FRAME_IN_FLIGHT);
+        resource_binding->generation = 1;
+    }
+
+    // Создание дискрипторов ресурса.
+    // NOTE: Зарезервировано 3, т.к. кол-во кадров в обработке 2-3 (см. max_frames_in_flight).
+    VkDescriptorSetLayout set_layouts[3] = {
+        vk_shader->set_layouts[set_index],
+        vk_shader->set_layouts[set_index],
+        vk_shader->set_layouts[set_index]
+    };
+
+    VkDescriptorSetAllocateInfo set_allocate_info = {
+        .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool     = vk_shader->descriptor_pool,
+        .descriptorSetCount = context->swapchain.max_frames_in_flight,
+        .pSetLayouts        = set_layouts
+    };
+
+    VkResult result = vkAllocateDescriptorSets(context->device.logical, &set_allocate_info, resource->descriptor_sets);
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to acquire shader resource for SET=%u: Descriptor sets could not be allocated: %s.", set_index, vulkan_result_get_string(result));
+        return false;
+    }
+
+    *out_resource_id = resource_id;
+    vk_shader->resource_count++;
+    return true;
+}
+
+void vulkan_shader_release_resource(shader_t* shader, u32 resource_id)
+{
+    vulkan_shader_t* vk_shader = shader->internal_data;
+    vulkan_shader_resource_t* resource = &vk_shader->resources[resource_id];
+
+    // Ожидание завершения операций использующих этот ресурс.
+    vkDeviceWaitIdle(context->device.logical);
+
+    if(resource->id == INVALID_ID32)
+    {
+        LOG_ERROR("Failed to release shader resource for ID=%u: Slot is free.", resource_id);
+        return;
+    }
+
+    VkResult result = vkFreeDescriptorSets(
+        context->device.logical, vk_shader->descriptor_pool, context->swapchain.max_frames_in_flight, resource->descriptor_sets
+    );
+
+    if(!vulkan_result_is_success(result))
+    {
+        LOG_ERROR("Failed to release shader resource for ID=%u: Descriptor sets could not be freed: %s.", resource_id, vulkan_result_get_string(result));
+        return;
+    }
+
+    // TODO: Организовать список свободных участков буфера + освободить память буфера.
+
+    // Освобождение памяти ресурса и инвалидация его.
+    mzero(resource, sizeof(vulkan_shader_resource_t));
+    resource->id = INVALID_ID32;
+    vk_shader->resource_count--;
+}
+
+void vulkan_shader_update_resource_binding(shader_t* shader, u32 resource_id, u32 binding_index, const void* data)
+{
+    vulkan_shader_t* vk_shader = shader->internal_data;
+    vulkan_shader_resource_t* resource = &vk_shader->resources[resource_id];
+
+    if(resource->id == INVALID_ID32)
+    {
+        LOG_ERROR("Failed to update resource for BINDING=%u: Invalid resource ID=%u.", binding_index, resource_id);
+        return;
+    }
+
+    usize resource_size = vk_shader->set_configs[resource->set_index].binding_sizes[binding_index];
+    usize resource_offset = resource->bindings[binding_index].uniform_buffer_offset + resource_size * context->swapchain.current_frame;
+
+    // TODO: В зависимости от типа дискриптора, обновлять нужные данные.
+    void* addr = POINTER_ADD_OFFSET(vk_shader->uniform_buffer_mapped_data, resource_offset);
+    mcopy(addr, data, resource_size);
+
+    resource->bindings[binding_index].generation++;
+}
+
+void vulkan_shader_apply_resource(shader_t* shader, u32 resource_id)
+{
+    vulkan_shader_t* vk_shader = shader->internal_data;
+    vulkan_shader_resource_t* resource = &vk_shader->resources[resource_id];
+
+    if(resource->id == INVALID_ID32)
+    {
+        LOG_ERROR("Failed to apply resource: Invalid resource ID=%u.", resource_id);
+        return;
+    }
+
     u32 current_frame = context->swapchain.current_frame;
     VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
-    vulkan_shader_t* vk_shader = shader->internal_data;
-    VkDescriptorSet descriptor_set = vk_shader->descriptor_sets[current_frame];
+    VkDescriptorSet descriptor_set = resource->descriptor_sets[current_frame];
 
-    // Указание в какую часть буфера зугружать данные.
-    u64 load_size = sizeof(renderer_camera_t);
-    u64 load_offset = current_frame * load_size;
+    // TODO: Связывание дескриптора с буфером должно происходить один раз.
+    //       вынести в отдельную функцию.
+    {
+        u32 write_set_count = 0;
+        VkWriteDescriptorSet write_sets[RENDERER_MAX_SHADER_SETS];
+        mzero(write_sets, sizeof(VkWriteDescriptorSet) * RENDERER_MAX_SHADER_SETS);
 
-    // Загрузка новых данных в буфер.
-    vulkan_buffer_load_range(&shader->uniform_buffer, load_offset, load_size, camera);
+        for(u32 b = 0; b < resource->binding_count; ++b)
+        {
+            vulkan_shader_resource_binding_t* binding = &resource->bindings[b];
 
-    // Обновление дескрипторного набора.
-    VkDescriptorBufferInfo descriptor_buffer_info = {
-        .buffer = ((vulkan_buffer_t*)shader->uniform_buffer.internal_data)->handle,
-        .offset = load_offset,
-        .range  = load_size
-    };
+            usize resource_size = vk_shader->set_configs[resource->set_index].binding_sizes[b];
+            usize resource_offset = binding->uniform_buffer_offset + resource_size * current_frame;
 
-    VkWriteDescriptorSet write_descriptor_set = {
-        .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .pNext            = nullptr,
-        .dstSet           = descriptor_set,
-        .dstBinding       = 0,
-        .dstArrayElement  = 0,
-        .descriptorCount  = 1,
-        .descriptorType   = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .pImageInfo       = nullptr,
-        .pBufferInfo      = &descriptor_buffer_info,
-        .pTexelBufferView = nullptr
-    };
+            VkDescriptorBufferInfo buffer_info = {
+                .buffer = ((vulkan_buffer_t*)vk_shader->uniform_buffer.internal_data)->handle,
+                .offset = resource_offset,
+                .range  = resource_size
+            };
 
-    vkUpdateDescriptorSets(context->device.logical, 1, &write_descriptor_set, 0, nullptr);
+            // TODO: Врменно не оддерживает более одного дескриптора в биндинге!
+            write_sets[write_set_count] = (VkWriteDescriptorSet){
+                .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                .dstSet           = descriptor_set,
+                .dstBinding       = b,
+                .dstArrayElement  = 0,
+                .descriptorCount  = vk_shader->set_configs[resource->set_index].bindings[b].descriptorCount,
+                .descriptorType   = vk_shader->set_configs[resource->set_index].bindings[b].descriptorType,
+                .pBufferInfo      = &buffer_info,
+                .pImageInfo       = nullptr,
+                .pTexelBufferView = nullptr
+            };
 
-    // Привязка набора дескрипторов к размещению для обновления.
-    vkCmdBindDescriptorSets(cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_shader->pipeline_layout, 0, 1, &descriptor_set, 0, nullptr);
+            write_set_count++;
+        }
+
+        vkUpdateDescriptorSets(context->device.logical, write_set_count, write_sets, 0, nullptr);
+    }
+
+    // Привязка текущего ресурса к соответствующему размещению пайплайна.
+    vkCmdBindDescriptorSets(
+        cmdbuf, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_shader->pipeline_layout, resource->set_index, 1, &descriptor_set, 0, nullptr
+    );
 }
 
 void vulkan_shader_update_model(shader_t* shader, renderer_model_t* model)
@@ -1751,7 +1957,7 @@ void vulkan_shader_update_model(shader_t* shader, renderer_model_t* model)
     vkCmdPushConstants(cmdbuf, vk_shader->pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(renderer_model_t), model);
 }
 
-void vulkan_texture_acquire_resources(texture_t* t, const void* data)
+void vulkan_texture_create(texture_t* t, const void* data)
 {
     t->internal_data = mallocate(sizeof(vulkan_texture_map_t), MEMORY_TAG_TEXTURE);
     vulkan_texture_map_t* map = t->internal_data;
@@ -1760,7 +1966,7 @@ void vulkan_texture_acquire_resources(texture_t* t, const void* data)
     VkFormat image_format = VK_FORMAT_R8G8B8A8_UNORM;
     u32 image_size = t->width * t->height * t->channels;
 
-    // 1. Создание изображения и промежуточного буфера для закрузки в него данных.
+    // 1. Создание изображения и промежуточного буфера для загрузки в него данных.
     if(!vulkan_image_create(
         context, t->width, t->height, image_format, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -1778,7 +1984,7 @@ void vulkan_texture_acquire_resources(texture_t* t, const void* data)
     }
 
     buffer_t staging = { .type = BUFFER_TYPE_STAGING, .size = image_size };
-    if(!vulkan_buffer_acquire_resources(&staging))
+    if(!vulkan_buffer_create(&staging))
     {
         LOG_ERROR("Failed to create staging buffer.");
         return;
@@ -1796,7 +2002,7 @@ void vulkan_texture_acquire_resources(texture_t* t, const void* data)
     vulkan_image_transition_layout(cmdbuf, VULKAN_IMAGE_TRANSITION_TRANSFER_DST_TO_SHADER_READ, &map->image.handle);
 
     vulkan_command_buffer_end_single_use(&context->graphics_command_manager, cmdbuf);
-    vulkan_buffer_release_resources(&staging);
+    vulkan_buffer_destroy(&staging);
 
     // TODO: Сделать полностью настраиваемой.
     VkSamplerCreateInfo sampler_info = {
@@ -1828,7 +2034,7 @@ void vulkan_texture_acquire_resources(texture_t* t, const void* data)
     t->generation++;
 }
 
-void vulkan_texture_release_resources(texture_t* t)
+void vulkan_texture_destroy(texture_t* t)
 {
     vulkan_texture_map_t* map = t->internal_data;
     vkDestroySampler(context->device.logical, map->sampler, context->allocator);

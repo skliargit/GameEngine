@@ -5,6 +5,34 @@
 
 typedef struct platform_window platform_window;
 
+/**
+    @brief Максимальное количество кадров в обработке.
+*/
+#define RENDERER_MAX_FRAME_IN_FLIGHT     3
+
+/**
+    @brief Максимальное количество стадий шейдера.
+    NOTE: На данный момент поддерживаются: вершинный и фрагментный.
+*/
+#define RENDERER_MAX_SHADER_STAGES       2
+
+/**
+    @brief Максимальное количество наборов шейдера.
+    NOTE: Временно ограничено 2-мя.
+*/
+#define RENDERER_MAX_SHADER_SETS         2
+
+/**
+    @brief Максимальное количество привязок одного набора шейдера.
+*/
+#define RENDERER_MAX_SHADER_SET_BINDINGS 1
+
+/**
+    @brief Максимальное количество ресурсов шейдера
+*/
+#define RENDERER_MAX_SHADER_RESOURCES    64
+
+
 typedef enum renderer_backend_type {
     RENDERER_BACKEND_TYPE_VULKAN,
     RENDERER_BACKEND_TYPE_OPENGL,
@@ -49,8 +77,6 @@ typedef struct buffer {
     void* internal_data;                        /**< Внутренние данные бэкенда. */
 } buffer_t;
 
-#define SHADER_MAX_STAGES 2
-
 /**
     @brief Стадии шейдеров (можно комбинировать).
 */
@@ -60,11 +86,21 @@ typedef enum shader_stage {
 } shader_stage_t;
 
 /**
+    @brief 
+*/
+typedef enum shader_resource_type {
+    SHADER_RESOURCE_TYPE_UNIFORM_BUFFER,
+    SHADER_RESOURCE_TYPE_COMBINED_IMAGE_SAMPLER,
+    SHADER_RESOURCE_TYPE_SAMPLER,
+    SHADER_RESOURCE_TYPE_STORAGE_BUFFER,
+    SHADER_RESOURCE_TYPE_COUNT
+} shader_resource_type_t;
+
+/**
     @brief Контекст шейдера.
 */
 typedef struct shader {
-    buffer_t uniform_buffer;                    /**< Буфер данных (размер данных * на количество кадров). */
-    void* internal_data;                        /**< Внутренние данные бэкенда.                           */
+    void* internal_data;                        /**< Внутренние данные бэкенда. */
 } shader_t;
 
 // TODO: Временно.
@@ -82,7 +118,13 @@ typedef struct renderer_model {
     mat4 padding[3];                            /**< Выравнивание объекта.          */
 } renderer_model_t;
 
-// TODO: Временно! Сделать shader_config и другие.
+// TODO: Временно.
+typedef struct renderer_object {
+    vec4 diffuse_color;
+    vec4 padding[3];
+} renderer_object_t;
+
+// TODO: Сделать shader_config и другие.
 typedef struct shader_stage_file {
     char* path;
     shader_stage_t stage;

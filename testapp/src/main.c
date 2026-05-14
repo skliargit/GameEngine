@@ -20,6 +20,8 @@ static u32 height_cached;
 static bool cursor_locked;
 
 static shader_t world_shader;
+static u32 world_shader_camera;
+
 static renderer_camera_t world_camera;
 static renderer_model_t plane_model;
 static buffer_t vertex_buffer;
@@ -41,6 +43,9 @@ static bool game_initialize(const application_config* config)
         return false;
     }
     LOG_TRACE("World shader created successfully.");
+
+    // TODO: Временно!
+    renderer_shader_acquire_resource(&world_shader, 0, &world_shader_camera);
 
     if(!renderer_buffer_create(BUFFER_TYPE_VERTEX, sizeof(vertex3d) * 1000, &vertex_buffer))
     {
@@ -138,7 +143,7 @@ static bool game_update(f32 delta_time)
 
         if(input_key_held(KEY_LSHIFT))
         {
-            speed *= 5.0f;
+            speed *= 3.0f;
         }
 
         if(input_key_down(KEY_TAB))
@@ -180,7 +185,7 @@ static bool game_update(f32 delta_time)
         i32 mouse_dx, mouse_dy;
         if(cursor_locked && input_mouse_delta(&mouse_dx, &mouse_dy))
         {
-            const f32 mouse_sens = 600;
+            const f32 mouse_sens = 450;
             f32 yaw_deg = -(f32)mouse_dx / (f32)width_cached * mouse_sens;
             f32 pitch_deg = -(f32)mouse_dy / (f32)height_cached * mouse_sens;
 
@@ -304,14 +309,13 @@ static bool game_render(f32 delta_time)
 
     world_camera.proj = proj;
     world_camera.view = view;
-    renderer_shader_update_camera(&world_shader, &world_camera);
+    renderer_shader_update_resource_binding(&world_shader, world_shader_camera, 0, &world_camera);
+    renderer_shader_apply_resource(&world_shader, world_shader_camera);
 
     renderer_shader_update_model(&world_shader, &plane_model);
 
     renderer_frame_bind_buffer(&vertex_buffer, 0);
     renderer_frame_bind_buffer(&index_buffer, 0);
-
-    // renderer_frame_draw(6);
     renderer_frame_draw_indexed(6);
 
     return true;
