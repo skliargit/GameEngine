@@ -63,7 +63,12 @@ static bool on_event(platform_window_event_context_t* event)
         case PLATFORM_WINDOW_EVENT_RESIZE: {
             u32 width = event->window_resize.to_width;
             u32 height = event->window_resize.to_height;
-            context->on_resize(width, height);
+
+            // TODO: Избавится? Переделать?
+            if(event->window_resize.state == false)
+            {
+                context->on_resize(width, height);
+            }
         } break;
 
         case PLATFORM_WINDOW_EVENT_KEYBOARD_KEY: {

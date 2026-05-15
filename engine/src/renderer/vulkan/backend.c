@@ -15,6 +15,9 @@
 #include "core/containers/darray.h"
 #include "platform/file.h"
 
+// TODO: В отдельный файл.
+// #include "vendor/spirv_reflect.h"
+
 static vulkan_context* context = nullptr;
 
 static VkResult instance_create()
@@ -1268,6 +1271,229 @@ void vulkan_buffer_copy_range(buffer_t* src, usize src_offset, buffer_t* dst, us
     buffer_copy_range(src->internal_data, src_offset, dst->internal_data, dst_offset, size);
 }
 
+// static u32 shader_reflect_attribute_size(SpvReflectInterfaceVariable* attr)
+// {
+//     u32 component_count = 0;
+//     u32 component_size = attr->numeric.scalar.width / 8;
+
+//     switch(attr->format)
+//     {
+//         case SPV_REFLECT_FORMAT_R16_UINT:
+//         case SPV_REFLECT_FORMAT_R16_SINT:
+//         case SPV_REFLECT_FORMAT_R16_SFLOAT:
+//         case SPV_REFLECT_FORMAT_R32_UINT:
+//         case SPV_REFLECT_FORMAT_R32_SINT:
+//         case SPV_REFLECT_FORMAT_R32_SFLOAT:
+//         case SPV_REFLECT_FORMAT_R64_UINT:
+//         case SPV_REFLECT_FORMAT_R64_SINT:
+//         case SPV_REFLECT_FORMAT_R64_SFLOAT:
+//             component_count = 1;
+//             break;
+//         case SPV_REFLECT_FORMAT_R16G16_UINT:
+//         case SPV_REFLECT_FORMAT_R16G16_SINT:
+//         case SPV_REFLECT_FORMAT_R16G16_SFLOAT:
+//         case SPV_REFLECT_FORMAT_R32G32_UINT:
+//         case SPV_REFLECT_FORMAT_R32G32_SINT:
+//         case SPV_REFLECT_FORMAT_R32G32_SFLOAT:
+//         case SPV_REFLECT_FORMAT_R64G64_UINT:
+//         case SPV_REFLECT_FORMAT_R64G64_SINT:
+//         case SPV_REFLECT_FORMAT_R64G64_SFLOAT:
+//             component_count = 2;
+//             break;
+//         case SPV_REFLECT_FORMAT_R16G16B16_UINT:
+//         case SPV_REFLECT_FORMAT_R16G16B16_SINT:
+//         case SPV_REFLECT_FORMAT_R16G16B16_SFLOAT:
+//         case SPV_REFLECT_FORMAT_R32G32B32_UINT:
+//         case SPV_REFLECT_FORMAT_R32G32B32_SINT:
+//         case SPV_REFLECT_FORMAT_R32G32B32_SFLOAT:
+//         case SPV_REFLECT_FORMAT_R64G64B64_UINT:
+//         case SPV_REFLECT_FORMAT_R64G64B64_SINT:
+//         case SPV_REFLECT_FORMAT_R64G64B64_SFLOAT:
+//             component_count = 3;
+//             break;
+//         case SPV_REFLECT_FORMAT_R16G16B16A16_UINT:
+//         case SPV_REFLECT_FORMAT_R16G16B16A16_SINT:
+//         case SPV_REFLECT_FORMAT_R16G16B16A16_SFLOAT:
+//         case SPV_REFLECT_FORMAT_R32G32B32A32_UINT:
+//         case SPV_REFLECT_FORMAT_R32G32B32A32_SINT:
+//         case SPV_REFLECT_FORMAT_R32G32B32A32_SFLOAT:
+//         case SPV_REFLECT_FORMAT_R64G64B64A64_UINT:
+//         case SPV_REFLECT_FORMAT_R64G64B64A64_SINT:
+//         case SPV_REFLECT_FORMAT_R64G64B64A64_SFLOAT:
+//             component_count = 4;
+//             break;
+//         default:
+//             LOG_ERROR("Attribute format not supported: %d.", attr->format);
+//             return 0;
+//     }
+
+//     u32 element_size = component_count * component_size;
+//     return element_size;
+// }
+
+// static void shader_reflect(const char* shader_name, const usize data_size, const void* data)
+// {
+//     SpvReflectShaderModule module;
+//     if(spvReflectCreateShaderModule(data_size, data, &module) != SPV_REFLECT_RESULT_SUCCESS)
+//     {
+//         LOG_ERROR("Failed to create spv reflector shader module for %s.", shader_name);
+//         return;
+//     }
+
+//     LOG_TRACE("----------------------------------------------------------");
+//     LOG_TRACE("Shader analysis: %s", shader_name);
+//     LOG_TRACE("----------------------------------------------------------");
+
+//     // Стадия шейдера.
+//     switch(module.shader_stage)
+//     {
+//         case SPV_REFLECT_SHADER_STAGE_VERTEX_BIT:
+//             LOG_TRACE("Stage: VERTEX.");
+//             break;
+//         case SPV_REFLECT_SHADER_STAGE_FRAGMENT_BIT:
+//             LOG_TRACE("Stage: FRAGMENT.");
+//             break;
+//         case SPV_REFLECT_SHADER_STAGE_COMPUTE_BIT:
+//             LOG_TRACE("Stage: COMPUTE but not supported yet.");
+//             break;
+//         case SPV_REFLECT_SHADER_STAGE_GEOMETRY_BIT:
+//             LOG_TRACE("Stage: GEOMETRY but not supported yet.");
+//             break;
+//         case SPV_REFLECT_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+//             LOG_TRACE("Stage: TESSELLATION CONTROL but not supported yet.");
+//             break;
+//         case SPV_REFLECT_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
+//             LOG_TRACE("Stage: TESSELLATION EVALUTION but not supported yet.");
+//             break;
+//         default:
+//             LOG_ERROR("No support shader stage: %d.", module.shader_stage);
+//             return;
+//     }
+
+//     // TODO: А как формировать VkVertexInputBindingDescription??? Конфигурацией передавать в шейдер?
+//     // 1. Точки входа.
+//     LOG_TRACE("Entry points (count: %u):", module.entry_point_count);
+//     for(u32 i = 0; i < module.entry_point_count; ++i)
+//     {
+//         LOG_TRACE("    Name: %s.", module.entry_points[i].name);
+//     }
+
+//     // 2. Атрибуты (входные переменные) - только для vertex стадии.
+//     if(module.shader_stage == SPV_REFLECT_SHADER_STAGE_VERTEX_BIT)
+//     {
+//         u32 attr_count = 0;
+//         if(spvReflectEnumerateInputVariables(&module, &attr_count, nullptr) != SPV_REFLECT_RESULT_SUCCESS)
+//         {
+//             LOG_ERROR("Failed to get input attribute count.");
+//             spvReflectDestroyShaderModule(&module);
+//             return;
+//         }
+
+//         if(attr_count > 0)
+//         {
+//             SpvReflectInterfaceVariable** attrs = darray_create_custom(SpvReflectInterfaceVariable*, attr_count);
+//             if(spvReflectEnumerateInputVariables(&module, &attr_count, attrs) != SPV_REFLECT_RESULT_SUCCESS)
+//             {
+//                 LOG_ERROR("Failed to enumerate input attributes.");
+//                 darray_destroy(attrs);
+//                 spvReflectDestroyShaderModule(&module);
+//                 return;
+//             }
+
+//             LOG_TRACE("Input attributes (count: %u):", attr_count);
+//             for(u32 i = 0; i < attr_count; ++i)
+//             {
+//                 SpvReflectInterfaceVariable* attr = attrs[i];
+
+//                 if(attr->location != INVALID_ID32)
+//                 {
+//                     u32 size = shader_reflect_attribute_size(attr);
+//                     LOG_TRACE("    layout(location=%u) in size: %u, name: %s", attr->location, size, attr->name);
+//                 }
+//             }
+
+//             darray_destroy(attrs);
+//         }
+//     }
+
+//     // 3. Атрибуты (выходные переменные) - только для fragment стадии.
+//     if(module.shader_stage == SPV_REFLECT_SHADER_STAGE_FRAGMENT_BIT)
+//     {
+//         // TODO: для color_attachments!
+//         u32 attr_count = 0;
+
+//         if(spvReflectEnumerateOutputVariables(&module, &attr_count, nullptr) != SPV_REFLECT_RESULT_SUCCESS)
+//         {
+//             LOG_ERROR("Failed to get output attribute count.");
+//             spvReflectDestroyShaderModule(&module);
+//             return;
+//         }
+
+//         if(attr_count > 0)
+//         {
+//             SpvReflectInterfaceVariable** attrs = darray_create_custom(SpvReflectInterfaceVariable*, attr_count);
+//             if(spvReflectEnumerateOutputVariables(&module, &attr_count, attrs) != SPV_REFLECT_RESULT_SUCCESS)
+//             {
+//                 LOG_ERROR("Failed to enumerate output attributes.");
+//                 darray_destroy(attrs);
+//                 spvReflectDestroyShaderModule(&module);
+//                 return;
+//             }
+
+//             LOG_TRACE("Output attributes (count: %u):", attr_count);
+//             for(u32 i = 0; i < attr_count; ++i)
+//             {
+//                 SpvReflectInterfaceVariable* attr = attrs[i];
+
+//                 if(attr->location != INVALID_ID32)
+//                 {
+//                     u32 size = shader_reflect_attribute_size(attr);
+//                     LOG_TRACE("    layout(location=%u) out size: %u, name: %s, array count: %u", attr->location, size, attr->name, attr->array.dims_count ? attr->array.dims[0] : 1);
+//                 }
+//             }
+
+//             darray_destroy(attrs);
+//         }
+//     }
+
+//     // 4. Дескрипторы (ресурсы).
+//     u32 binding_count = 0;
+//     if(spvReflectEnumerateDescriptorBindings(&module, &binding_count, nullptr) != SPV_REFLECT_RESULT_SUCCESS)
+//     {
+//         LOG_ERROR("Failed to get binding count.");
+//         spvReflectDestroyShaderModule(&module);
+//         return;
+//     }
+
+//     if(binding_count > 0)
+//     {
+//         SpvReflectDescriptorBinding** bindings = darray_create_custom(SpvReflectDescriptorBinding*, binding_count);
+//         if(spvReflectEnumerateDescriptorBindings(&module, &binding_count, bindings) != SPV_REFLECT_RESULT_SUCCESS)
+//         {
+//             LOG_ERROR("Failed to enumerate bindings.");
+//             darray_destroy(bindings);
+//             spvReflectDestroyShaderModule(&module);
+//             return;
+//         }
+
+//         LOG_TRACE("Bindings (count=%u):", binding_count);
+//         for(u32 i = 0; i < binding_count; ++i)
+//         {
+//             SpvReflectDescriptorBinding* binding = bindings[i];
+//             LOG_TRACE(
+//                 "    layout(set=%u, binding=%u) type=%d size=%u name=%s", binding->set, binding->binding,
+//                 binding->descriptor_type, binding->block.size, binding->name
+//             );
+//         }
+
+//         darray_destroy(bindings);
+//     }
+
+//     // 5. TODO: Push constants
+
+//     spvReflectDestroyShaderModule(&module);
+// }
+
 static bool shader_create_modules(u32 stage_count, shader_stage_file_t* stage_files, VkPipelineShaderStageCreateInfo* out_stages)
 {
     // Очистка структуры.
@@ -1324,6 +1550,9 @@ static bool shader_create_modules(u32 stage_count, shader_stage_file_t* stage_fi
             LOG_ERROR("Failed to create shader module from file '%s': %s.", stage_files[i].path, vulkan_result_get_string(result));
             return false;
         }
+
+        // TODO: Временно.
+        // shader_reflect(stage_files[i].path, file_size, shader_bytes);
 
         // Освобождение памяти для бинарных данных шейдера.
         mfree(shader_bytes, file_size, MEMORY_TAG_UNKNOWN);
@@ -1701,7 +1930,7 @@ bool vulkan_shader_create(shader_t* shader, u32 stage_count, shader_stage_file_t
         return false;
     }
 
-    // Инициализация ресурсов.
+    // Инвалидация ресурсов.
     for(u32 i = 0; i < RENDERER_MAX_SHADER_RESOURCES; ++i)
     {
         vk_shader->resources[i].id = INVALID_ID32;
@@ -1791,7 +2020,7 @@ bool vulkan_shader_acquire_resource(shader_t* shader, u32 set_index, u32* out_re
         // TODO: Выравнивание размера для правильного получения следующего смещения.
         {
             // NOTE: Поправка на количество кадров.
-            usize memory_requirements = vk_shader->set_configs[set_index].binding_sizes[b] * context->swapchain.max_frames_in_flight;
+            usize memory_requirements = vk_shader->set_configs[set_index].binding_sizes[b] * resource->binding_count * context->swapchain.max_frames_in_flight; // TODO: для текстуры достаточно одного дескриптора.
 
             if(vk_shader->uniform_buffer.size < (vk_shader->uniform_buffer_next_offset + memory_requirements))
             {
@@ -1819,7 +2048,7 @@ bool vulkan_shader_acquire_resource(shader_t* shader, u32 set_index, u32* out_re
     VkDescriptorSetAllocateInfo set_allocate_info = {
         .sType              = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool     = vk_shader->descriptor_pool,
-        .descriptorSetCount = context->swapchain.max_frames_in_flight,
+        .descriptorSetCount = context->swapchain.max_frames_in_flight, // TODO: для текстуры достаточно одного дескриптора.
         .pSetLayouts        = set_layouts
     };
 
@@ -1871,6 +2100,7 @@ void vulkan_shader_update_resource_binding(shader_t* shader, u32 resource_id, u3
 {
     vulkan_shader_t* vk_shader = shader->internal_data;
     vulkan_shader_resource_t* resource = &vk_shader->resources[resource_id];
+    vulkan_shader_set_config_t* resource_config = &vk_shader->set_configs[resource->set_index];
 
     if(resource->id == INVALID_ID32)
     {
@@ -1878,20 +2108,23 @@ void vulkan_shader_update_resource_binding(shader_t* shader, u32 resource_id, u3
         return;
     }
 
-    usize resource_size = vk_shader->set_configs[resource->set_index].binding_sizes[binding_index];
+    // TODO: Пока что обновляет массив ресурсов целиком. Сделать отдельное обновление по индексу: u32 array_first, u32 array_count.
+    usize resource_size = resource_config->binding_sizes[binding_index] * resource_config->bindings[binding_index].descriptorCount;
     usize resource_offset = resource->bindings[binding_index].uniform_buffer_offset + resource_size * context->swapchain.current_frame;
 
     // TODO: В зависимости от типа дискриптора, обновлять нужные данные.
     void* addr = POINTER_ADD_OFFSET(vk_shader->uniform_buffer_mapped_data, resource_offset);
     mcopy(addr, data, resource_size);
 
-    resource->bindings[binding_index].generation++;
+    // TODO: Необходимо только для текстур.
+    // resource->bindings[binding_index].generation++;
 }
 
 void vulkan_shader_apply_resource(shader_t* shader, u32 resource_id)
 {
     vulkan_shader_t* vk_shader = shader->internal_data;
     vulkan_shader_resource_t* resource = &vk_shader->resources[resource_id];
+    vulkan_shader_set_config_t* resource_config = &vk_shader->set_configs[resource->set_index];
 
     if(resource->id == INVALID_ID32)
     {
@@ -1903,43 +2136,45 @@ void vulkan_shader_apply_resource(shader_t* shader, u32 resource_id)
     VkCommandBuffer cmdbuf = context->graphics_command_buffers[current_frame];
     VkDescriptorSet descriptor_set = resource->descriptor_sets[current_frame];
 
-    // TODO: Связывание дескриптора с буфером должно происходить один раз.
-    //       вынести в отдельную функцию.
+    // Обновление дескриптора.
+    u32 write_set_count = 0;
+    VkWriteDescriptorSet write_sets[RENDERER_MAX_SHADER_SETS];
+    // mzero(write_sets, sizeof(VkWriteDescriptorSet) * RENDERER_MAX_SHADER_SETS);
+
+    for(u32 binding_index = 0; binding_index < resource->binding_count; ++binding_index)
     {
-        u32 write_set_count = 0;
-        VkWriteDescriptorSet write_sets[RENDERER_MAX_SHADER_SETS];
-        mzero(write_sets, sizeof(VkWriteDescriptorSet) * RENDERER_MAX_SHADER_SETS);
+        vulkan_shader_resource_binding_t* binding = &resource->bindings[binding_index];
+        if(binding->generation == binding->generations[current_frame]) continue;
 
-        for(u32 b = 0; b < resource->binding_count; ++b)
-        {
-            vulkan_shader_resource_binding_t* binding = &resource->bindings[b];
+        usize resource_size = resource_config->binding_sizes[binding_index] * resource_config->bindings[binding_index].descriptorCount;
+        usize resource_offset = binding->uniform_buffer_offset + resource_size * current_frame;
 
-            usize resource_size = vk_shader->set_configs[resource->set_index].binding_sizes[b];
-            usize resource_offset = binding->uniform_buffer_offset + resource_size * current_frame;
+        VkDescriptorBufferInfo buffer_info = {
+            .buffer = ((vulkan_buffer_t*)vk_shader->uniform_buffer.internal_data)->handle,
+            .offset = resource_offset,
+            .range  = resource_size
+        };
 
-            VkDescriptorBufferInfo buffer_info = {
-                .buffer = ((vulkan_buffer_t*)vk_shader->uniform_buffer.internal_data)->handle,
-                .offset = resource_offset,
-                .range  = resource_size
-            };
+        write_sets[write_set_count] = (VkWriteDescriptorSet){
+            .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet           = descriptor_set,
+            .dstBinding       = binding_index,
+            .dstArrayElement  = 0,
+            .descriptorCount  = resource_config->bindings[binding_index].descriptorCount,
+            .descriptorType   = resource_config->bindings[binding_index].descriptorType,
+            .pBufferInfo      = &buffer_info,
+            .pImageInfo       = nullptr,
+            .pTexelBufferView = nullptr
+        };
 
-            // TODO: Врменно не оддерживает более одного дескриптора в биндинге!
-            write_sets[write_set_count] = (VkWriteDescriptorSet){
-                .sType            = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet           = descriptor_set,
-                .dstBinding       = b,
-                .dstArrayElement  = 0,
-                .descriptorCount  = vk_shader->set_configs[resource->set_index].bindings[b].descriptorCount,
-                .descriptorType   = vk_shader->set_configs[resource->set_index].bindings[b].descriptorType,
-                .pBufferInfo      = &buffer_info,
-                .pImageInfo       = nullptr,
-                .pTexelBufferView = nullptr
-            };
+        write_set_count++;
+        binding->generations[current_frame] = binding->generation;
+    }
 
-            write_set_count++;
-        }
-
+    if(write_set_count > 0)
+    {
         vkUpdateDescriptorSets(context->device.logical, write_set_count, write_sets, 0, nullptr);
+        LOG_DEBUG("Resource descriptor with ID=%u has been updated. Current frame %u, set %u.", resource_id, current_frame, resource->set_index);
     }
 
     // Привязка текущего ресурса к соответствующему размещению пайплайна.

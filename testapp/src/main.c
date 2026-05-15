@@ -37,6 +37,7 @@ static bool game_initialize(const application_config* config)
 {
     UNUSED(config);
 
+    // TODO: Организовать конфигурацию!
     if(!renderer_shader_create(ARRAY_SIZE(shader_stage_files), shader_stage_files, &world_shader))
     {
         LOG_ERROR("Failed to load world shader.");
@@ -44,7 +45,7 @@ static bool game_initialize(const application_config* config)
     }
     LOG_TRACE("World shader created successfully.");
 
-    // TODO: Временно!
+    // TODO: Временно! Обновляемые данные через uniform buffer должны быть созданы по умолчанию, так же текстуры по умолчанию?
     renderer_shader_acquire_resource(&world_shader, 0, &world_shader_camera);
 
     if(!renderer_buffer_create(BUFFER_TYPE_VERTEX, sizeof(vertex3d) * 1000, &vertex_buffer))
